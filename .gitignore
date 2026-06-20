@@ -1,0 +1,86 @@
+# ========================================================
+# D:\Apps\traveller - root .gitignore
+# ========================================================
+# This is the parent repo for the traveller project.
+# .gstack/ is a git SUBMODULE (see .gitmodules) - it has its own .gitignore.
+# The parent's only job is to:
+#   1. track the .gitmodules pointer
+#   2. track project-level docs/scripts that live OUTSIDE .gstack/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Node / JS (if we add non-submodule JS at root) ---
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python (if added) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# --- Build / dist (if added) ---
+dist/
+build/
+out/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# --- OS / temp ---
+*.tmp
+*.bak
+*.swp
+~$*
+
+# --- Secrets / credentials (NEVER commit) ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# --- Local-only state and archives (regenerable, never committed) ---
+# These live inside .gstack/state/ but are EXCLUDED from git because:
+#   - they're regenerable from running office-hours
+#   - they contain per-user session data and shouldn't be shared
+#   - they're listed explicitly so the parent repo .gitignore works
+#     even when the submodule is a fresh clone (no state/ dir)
+.gstack/state/sessions/
+.gstack/state/analytics/skill-usage.jsonl
+.gstack/state/.gstack/sessions/
+.gstack/state/.gstack/analytics/
+.gstack/state/.gstack/projects/
+.gstack/state/developer-profile.json
+.gstack/state/.office-hours-e2e-evidence.log
+.gstack/state/.gstack-verify-final.log
+.gstack/state/.gstack-verify-final.json
+.gstack/state/.archive/
+.gstack/state/.gstack/slug-cache/
+.gstack/hooks/
+.gstack/.verify.log
+.gstack/.zcode-discover.log
+.gstack/build-err.log
+.gstack/build-out.log
+
+# --- the gstack hook files (regenerable from session-start script) ---
+# Already covered by .gstack/hooks/ above
+
+# --- Allow submodule-specific ignores ---
+!.gitmodules
+!.gstack/
