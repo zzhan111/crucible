@@ -566,8 +566,155 @@ Expected: PASS, 10 个测试全过(4 parseJudgeScore + 3 routingProxy + 3 judge 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/rubric/judge-types.ts src/rubric/routing.judge.ts src/rubric/memorability.judge.ts src/rubric/dining_fit.judge.ts tests/rubric/judge.test.ts
-git commit -m "feat(rubric): 3 LLM judge rubrics (routing proxy+judge, memorability, dining_fit) with no-key degradation"
+git add src/rubric/judge-types.ts src/rubric/routing.judge.ts src/rubric/memorability.judge.ts src/rubric/dining_fit.judge.ts src/rubric/fanout.ts tests/rubric/judge.test.ts
+git commit -m "feat(rubric): 3 LLM judge rubrics + shared fanoutJudges (routing proxy+judge, memorability, dining_fit) with no-key degradation"
+```
+
+---
+
+## Task 3.5: 共享 judge fan-out 函数(eng-review A3 DRY 修复)
+
+**Files:**
+- Create: `src/rubric/fanout.ts`
+- Test: `tests/rubric/fanout.test.ts`
+
+- [ ] **Step 1: 写共享 fan-out 函数**
+
+```typescript
+// src/rubric/fanout.ts
+import type { Contract } from '../contract/schema.js';
+import type { Artifact } from '../predicates/types.js';
+import type { RubricScore } from './types.js';
+import type { JudgeContext } from './judge-types.js';
+import { routingJudge, routingProxy } from './routing.judge.js';
+import { memorabilityJudge } from './memorability.judge.js';
+import { diningFitJudge } from './dining_fit.judge.js';
+
+/**
+ * fanoutJudges: 共享的 judge fan-out 逻辑(eng-review A3 DRY 修复)。
+ * Task 4 JudgeAugmentedScorer 和 Task 9 judgeFanOut Agent 都调用此函数,
+ * 避免两处重复实现 judge 派发逻辑。
+ *
+ * 输入:artifact + contract(含 judge/proxy+judge rubric 定义)
+ * 输出:并行跑所有 judge rubric 的 RubricScore[]
+ */
+export async function fanoutJudges(
+  artifact: Artifact,
+  contract: Contract
+): Promise<RubricScore[]> {
+  const judgeDims = contract.rubric.filter(r => r.mode === 'judge' || r.mode === 'proxy+judge');
+  const promises: Promise<RubricScore>[] = [];
+  for (const r of judgeDims) {
+    const ctx: JudgeContext = {
+      artifact,
+      dim: r.dim,
+      weight: r.weight,
+      proxy_value: r.mode === 'proxy+judge' ? routingProxy(artifact) : undefined,
+    };
+    if (r.dim === 'routing') promises.push(routingJudge(ctx));
+    else if (r.dim === 'memorability') promises.push(memorabilityJudge(ctx));
+    else if (r.dim === 'dining_fit') promises.push(diningFitJudge(ctx));
+  }
+  return Promise.all(promises);
+}
+```
+
+- [ ] **Step 2: 写失败测试**
+
+```typescript
+// tests/rubric/fanout.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadContract } from '../../src/contract/validate.js';
+import { fanoutJudges } from '../../src/rubric/fanout.js';
+import type { Artifact } from '../../src/predicates/types.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-v1.yaml');
+
+describe('fanoutJudges (eng-review T3 直接覆盖)', () => {
+  beforeEach(() => {
+    delete process.env.OPENROUTER_API_KEY;
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('returns exactly 3 RubricScores for travel-sequence-v1 contract', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const artifact: Artifact = {
+      family: 'sequence',
+      nodes: [
+        { node_type: 'dining', action: 'breakfast' },
+        { node_type: 'transit', action: 'walk' },
+        { node_type: 'core_experience', action: 'hike' },
+      ],
+    };
+    const results = await fanoutJudges(artifact, contract);
+    expect(results).toHaveLength(3);
+  });
+
+  it('covers all 3 judge dims: routing, memorability, dining_fit', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const artifact: Artifact = {
+      family: 'sequence',
+      nodes: [{ node_type: 'dining', action: 'breakfast' }],
+    };
+    const results = await fanoutJudges(artifact, contract);
+    const dims = results.map(r => r.dim).sort();
+    expect(dims).toEqual(['dining_fit', 'memorability', 'routing']);
+  });
+
+  it('returns neutral 0.5 scores when no API key (degraded mode)', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const artifact: Artifact = {
+      family: 'sequence',
+      nodes: [{ node_type: 'dining', action: 'breakfast' }],
+    };
+    const results = await fanoutJudges(artifact, contract);
+    for (const r of results) {
+      expect(r.score).toBe(0.5); // neutral fallback
+    }
+  });
+
+  it('routing score carries proxy_value (proxy+judge mode)', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const artifact: Artifact = {
+      family: 'sequence',
+      nodes: [
+        { node_type: 'dining' },
+        { node_type: 'transit' },
+        { node_type: 'core_experience' },
+      ],
+    };
+    const results = await fanoutJudges(artifact, contract);
+    const routing = results.find(r => r.dim === 'routing');
+    expect(routing).toBeDefined();
+    expect(routing!.mode).toBe('proxy+judge');
+    expect(routing!.proxy_value).toBe(1.0); // fully bridged
+  });
+
+  it('handles empty artifact nodes', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const artifact: Artifact = { family: 'sequence', nodes: [] };
+    const results = await fanoutJudges(artifact, contract);
+    expect(results).toHaveLength(3); // still 3 judge dims, just scored on empty artifact
+  });
+});
+```
+
+- [ ] **Step 3: 跑测试确认通过**
+
+```bash
+npx vitest run tests/rubric/fanout.test.ts
+```
+
+Expected: PASS, 5 个测试全过。
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/rubric/fanout.ts tests/rubric/fanout.test.ts
+git commit -m "feat(rubric): shared fanoutJudges + direct unit tests (DRY: Task 4 + Task 9 共用)"
 ```
 
 ---
@@ -669,9 +816,7 @@ import type { CompiledScorer } from '../contract/compiler.js';
 import type { Artifact } from '../predicates/types.js';
 import type { RubricScore } from '../rubric/types.js';
 import type { ScoreReport, AsyncScorer } from './types.js';
-import { routingJudge, routingProxy } from '../rubric/routing.judge.js';
-import { memorabilityJudge } from '../rubric/memorability.judge.js';
-import { diningFitJudge } from '../rubric/dining_fit.judge.js';
+import { fanoutJudges } from '../rubric/fanout.js';
 
 const JUDGE_WEIGHT_IN_FINAL = 0.4;
 
@@ -679,6 +824,9 @@ const JUDGE_WEIGHT_IN_FINAL = 0.4;
  * createJudgeAugmentedScorer: 包装 Part 1 的确定性 Scorer,加 LLM judge 部分。
  * 实现 AsyncScorer 接口(score 返回 Promise)。
  * final_score = deterministic_score * 0.6 + judge_overall * 0.4
+ *
+ * 注(eng-review A3):judge fan-out 逻辑委托给共享函数 fanoutJudges,
+ * Task 9 的 judgeFanOut Agent 也调用同一函数,避免重复。
  */
 export function createJudgeAugmentedScorer(
   baseScorer: CompiledScorer,
@@ -691,26 +839,16 @@ export function createJudgeAugmentedScorer(
       // 1. 跑确定性部分(Part 1,同步)
       const baseReport = baseScorer.score(artifact);
 
-      // 2. 并行跑 judge rubric
-      const promises: Promise<RubricScore>[] = [];
-      for (const r of judgeDims) {
-        const ctx = {
-          artifact,
-          dim: r.dim,
-          weight: r.weight,
-          proxy_value: r.mode === 'proxy+judge' ? routingProxy(artifact) : undefined,
-        };
-        if (r.dim === 'routing') promises.push(routingJudge(ctx));
-        else if (r.dim === 'memorability') promises.push(memorabilityJudge(ctx));
-        else if (r.dim === 'dining_fit') promises.push(diningFitJudge(ctx));
-      }
-      const judgeScores = await Promise.all(promises);
+      // 2. 并行跑 judge rubric(委托给共享 fanoutJudges,eng-review A3)
+      const judgeScores: RubricScore[] = await fanoutJudges(artifact, contract);
 
       // 3. 计算 judge overall_score(加权平均,归一化到 judge 维度的权重和)
       const weightSum = judgeDims.reduce((acc, r) => acc + r.weight, 0);
+      // 预建权重 Map(eng-review A2:避免循环内 .find() 重复查找)
+      const weightByDim = new Map<string, number>(judgeDims.map(r => [r.dim, r.weight]));
       let judgeOverall = 0;
       for (const s of judgeScores) {
-        const w = judgeDims.find(r => r.dim === s.dim)?.weight ?? 0;
+        const w = weightByDim.get(s.dim) ?? 0;
         judgeOverall += s.score * w;
       }
       judgeOverall = weightSum > 0 ? judgeOverall / weightSum : 0.5;
@@ -1075,6 +1213,10 @@ export async function generatePatches(
         break;
       }
       case 'no_duplicate_state': {
+        // 选 node_index_end 而非 node_index(eng-review C2 注释):
+        // 保留前序节点的 state 语义(如 at_hotel 表示出发点),清除后续节点的重复。
+        // 两边都可清,选 end 是任意但合理:前序节点的 state 通常是"主动声明",
+        // 后续节点重复持有更可能是 bug(忘记 transition)。
         const idx = v.location.node_index_end ?? 1;
         const node = artifact.nodes[idx];
         const states = Array.isArray(node?.state) ? node.state.map(String) : [];
@@ -1272,7 +1414,7 @@ git commit -m "feat(agent): Curator detects novel state tokens + node_types, pro
 ```typescript
 // src/proposals/write.ts
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpansionProposal } from '../agents/curator.js';
@@ -1283,6 +1425,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * writeProposal: 把 Curator 的扩张提议写到 contracts/proposals/ + git commit。
  * 验收 4.4:契约版本化(每次 Curator 提议产生 commit)。
  * 降级:git commit 失败时只写文件(spec §8)。
+ *
+ * 安全(eng-review C1):用 execFileSync + 参数数组,不用 execSync 拼字符串,
+ * 避免 artifactId / proposal.dim 含特殊字符时的 shell 注入风险。
  */
 export function writeProposal(proposal: ExpansionProposal, artifactId: string): string {
   const proposalsDir = join(__dirname, '..', '..', 'contracts', 'proposals');
@@ -1305,14 +1450,12 @@ proposed_constraint: ${proposal.proposed_constraint ? JSON.stringify(proposal.pr
 
   writeFileSync(filepath, yamlContent, 'utf8');
 
-  // 尝试 git add + commit(失败降级)
+  // 尝试 git add + commit(失败降级)。用 execFileSync + 参数数组,无 shell 注入。
+  const repoRoot = join(__dirname, '..', '..');
+  const commitMsg = `chore(contract): curator proposal ${proposal.dim} for ${artifactId}`;
   try {
-    const repoRoot = join(__dirname, '..', '..');
-    execSync(`git add "${filepath}"`, { cwd: repoRoot, stdio: 'pipe' });
-    execSync(`git commit -m "chore(contract): curator proposal ${proposal.dim} for ${artifactId}"`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync('git', ['add', filepath], { cwd: repoRoot, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', commitMsg], { cwd: repoRoot, stdio: 'pipe' });
     console.log(`[Curator] proposal committed: ${filename}`);
   } catch (err) {
     console.warn(`[Curator] git commit failed (file written): ${err instanceof Error ? err.message : String(err)}`);
@@ -1404,12 +1547,10 @@ export async function scorerRun(
 ```typescript
 // src/agents/judge.ts
 import { Agent } from '@mastra/core/agent';
-import type { Contract } from '../contract/schema.js';
 import type { Artifact } from '../predicates/types.js';
+import type { Contract } from '../contract/schema.js';
 import type { RubricScore } from '../rubric/types.js';
-import { routingJudge, routingProxy } from '../rubric/routing.judge.js';
-import { memorabilityJudge } from '../rubric/memorability.judge.js';
-import { diningFitJudge } from '../rubric/dining_fit.judge.js';
+import { fanoutJudges } from '../rubric/fanout.js';
 
 export function createJudgeAgent() {
   return new Agent({
@@ -1418,25 +1559,17 @@ export function createJudgeAgent() {
   });
 }
 
+/**
+ * judgeFanOut: Mastra Agent 包装的 judge fan-out。
+ * 委托给共享函数 fanoutJudges(eng-review A3 DRY 修复),
+ * 与 Task 4 JudgeAugmentedScorer 共用同一 fan-out 逻辑。
+ */
 export async function judgeFanOut(
   artifact: Artifact,
   contract: Contract
 ): Promise<RubricScore[]> {
-  console.log('[Judge] fanning out to 3 judge rubrics in parallel');
-  const judgeDims = contract.rubric.filter(r => r.mode === 'judge' || r.mode === 'proxy+judge');
-  const promises: Promise<RubricScore>[] = [];
-  for (const r of judgeDims) {
-    const ctx = {
-      artifact,
-      dim: r.dim,
-      weight: r.weight,
-      proxy_value: r.mode === 'proxy+judge' ? routingProxy(artifact) : undefined,
-    };
-    if (r.dim === 'routing') promises.push(routingJudge(ctx));
-    else if (r.dim === 'memorability') promises.push(memorabilityJudge(ctx));
-    else if (r.dim === 'dining_fit') promises.push(diningFitJudge(ctx));
-  }
-  const results = await Promise.all(promises);
+  console.log('[Judge] fanning out to judge rubrics in parallel (via shared fanoutJudges)');
+  const results = await fanoutJudges(artifact, contract);
   console.log(`[Judge] collected ${results.length} judge scores`);
   return results;
 }
@@ -1512,71 +1645,75 @@ export interface CrucibleRunResult {
  * runCrucibleWorkflow: 完整迭代回路。
  * v1 → score → critic → v2 → score → critic → v3 → score
  * 终止:提升 < 0.01 或达 MAX_ITERATIONS。
+ *
+ * Score 跟踪(eng-review A1 修复):
+ * 每轮 iteration 记录 post-patch score(即下一轮输入 artifact 的分数)。
+ * - iteration[0].score = v1 patch 后的分数(= v2 输入的分数)
+ * - iteration[1].score = v2 patch 后的分数(= v3 输入的分数)
+ * 这样验收 4.2 比较相邻 iteration.score 就是"v2 vs v1"、"v3 vs v2",语义正确。
+ * pre-patch score 只用于 Critic 决策(读 ScoreReport.violations),不记入 iteration。
  */
 export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<CrucibleRunResult> {
   const allIterations: CrucibleIteration[] = [];
   let currentArtifact = input.artifact;
-  let currentScore = 0;
   let totalProposals = 0;
+  let lastPostPatchScore = 0;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     console.log(`\n[Workflow] === Iteration ${i + 1}/${MAX_ITERATIONS} ===`);
 
-    // 1. Score
-    console.log('[Workflow] Step 1: Scorer');
-    const report = await scorerRun(currentArtifact, input.baseScorer, input.contract);
+    // 1. Score(pre-patch,用于 Critic 读 violations)
+    console.log('[Workflow] Step 1: Scorer (pre-patch)');
+    const prePatchReport = await scorerRun(currentArtifact, input.baseScorer, input.contract);
 
-    // 2. Critic
+    // 2. Critic(读 pre-patch violations,生成 patch)
     console.log('[Workflow] Step 2: Critic');
-    const patches = await generatePatches(report, currentArtifact);
+    const patches = await generatePatches(prePatchReport, currentArtifact);
 
-    // 记录本轮(基于 patch 前的 artifact + score)
+    // 3. Apply patches → post-patch artifact
+    const postPatchArtifact = patches.length > 0
+      ? applyPatches(currentArtifact, patches)
+      : currentArtifact;
+
+    // 4. Score(post-patch,记录到 iteration)
+    console.log('[Workflow] Step 1b: Scorer (post-patch)');
+    const postPatchReport = await scorerRun(postPatchArtifact, input.baseScorer, input.contract);
+
+    // 记录本轮:artifact 是 pre-patch 的(展示原始输入),score 是 post-patch 的(展示修复效果)
     allIterations.push({
       artifact: currentArtifact,
-      score: report.final_score,
-      violations: report.deterministic.hard_violation_count,
+      score: postPatchReport.final_score,
+      violations: prePatchReport.deterministic.hard_violation_count,
       patchesApplied: patches.length,
     });
 
-    // 3. Apply patches → 下一轮 artifact
-    if (patches.length > 0) {
-      currentArtifact = applyPatches(currentArtifact, patches);
-    }
-
-    // 4. Curator(检测新颖度 + 写 proposal)
+    // 5. Curator(检测 post-patch artifact 新颖度)
     console.log('[Workflow] Step 3: Curator');
-    const proposals = await detectNovelty(currentArtifact, input.knownStates);
+    const proposals = await detectNovelty(postPatchArtifact, input.knownStates);
     for (const p of proposals) {
       writeProposal(p, input.artifactId);
     }
     totalProposals += proposals.length;
 
-    // 5. 如果有 patch,重新打分看是否提升
-    if (patches.length > 0) {
-      const reScored = await scorerRun(currentArtifact, input.baseScorer, input.contract);
-      const prevScore = allIterations[allIterations.length - 1].score;
-      currentScore = reScored.final_score;
-      // 更新本轮的 score 为 patch 后的(用于下一轮比较)
-      // 注意:iteration 记录的是 patch 前的,这里单独跟踪 currentScore
-    } else {
-      currentScore = report.final_score;
-    }
+    // 6. 更新 currentArtifact 为 post-patch(下一轮输入)
+    currentArtifact = postPatchArtifact;
 
-    // 6. 终止条件:提升 < MIN_IMPROVEMENT
+    // 7. 终止条件:post-patch 提升 < MIN_IMPROVEMENT(比较本轮 post-patch vs 上轮 post-patch)
     if (i > 0 && allIterations.length >= 2) {
-      const prevIterScore = allIterations[allIterations.length - 2].score;
-      const currIterScore = allIterations[allIterations.length - 1].score;
-      if (currIterScore - prevIterScore < MIN_IMPROVEMENT) {
+      const prevPostPatchScore = allIterations[allIterations.length - 2].score;
+      const currPostPatchScore = allIterations[allIterations.length - 1].score;
+      if (currPostPatchScore - prevPostPatchScore < MIN_IMPROVEMENT) {
         console.log(`[Workflow] improvement < ${MIN_IMPROVEMENT}, stopping`);
         break;
       }
     }
+    lastPostPatchScore = postPatchReport.final_score;
   }
 
   return {
     iterations: allIterations,
     finalArtifact: currentArtifact,
-    finalScore: currentScore,
+    finalScore: lastPostPatchScore,
     proposals: totalProposals,
   };
 }
@@ -1635,6 +1772,31 @@ describe('runCrucibleWorkflow', () => {
     for (let i = 1; i < violations.length; i++) {
       expect(violations[i]).toBeLessThanOrEqual(violations[i - 1]);
     }
+  });
+
+  // eng-review T1:验证 iteration.score 是 post-patch 分数(A1 修复),非递减 + 至少一轮提升
+  it('iteration scores are non-decreasing with at least one improvement (post-patch scores recorded)', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const baseScorer = compileContract(contract);
+    const result = await runCrucibleWorkflow({
+      artifact: hk3dayBuggy,
+      contract,
+      baseScorer,
+      artifactId: 'test-monotonic',
+      knownStates: ['at_hotel', 'hiking', 'luggage_drop', 'depart_from_hotel'],
+    });
+    expect(result.iterations.length).toBeGreaterThanOrEqual(2);
+    const scores = result.iterations.map(i => i.score);
+    // post-patch score 应非递减(Critic 修复违规 → 分数上升或持平)
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1] - 0.001); // 容差
+    }
+    // 至少一轮严格提升(v1→v2 违规修复)
+    const improvements = [];
+    for (let i = 1; i < scores.length; i++) {
+      improvements.push(scores[i] - scores[i - 1]);
+    }
+    expect(Math.max(...improvements)).toBeGreaterThan(0.01);
   });
 });
 ```
@@ -1701,12 +1863,20 @@ describe('P0 acceptance 4.2 — score improves over iterations', () => {
     // 至少 2 轮才能看改进
     expect(result.iterations.length).toBeGreaterThanOrEqual(2);
     const scores = result.iterations.map(i => i.score);
-    // 后续轮次分数应 >= 前一轮(Critic 修复违规后分数上升)
-    // 注意:P0 无 API key,judge 是 neutral 0.5,分数变化主要由确定性违规修复驱动
+    // 验收 4.2 语义(outside-voice Q1 修正):
+    // P0 无 API key 时 judge=neutral 0.5,修复违规后 det 0.55→1.0。
+    // 第一轮 v1→v2 必须有提升(违规被修复),后续轮次可持平(无更多违规可修)。
+    // 故断言:非递减 + 至少一轮严格提升。
     for (let i = 1; i < scores.length; i++) {
-      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1] - 0.001); // 容差
+      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1] - 0.001); // 非递减(容差)
     }
-    console.log('E2E 4.2 scores:', scores);
+    // 至少有一轮严格提升(v1→v2,违规修复后分数上升)
+    const improvements = [];
+    for (let i = 1; i < scores.length; i++) {
+      improvements.push(scores[i] - scores[i - 1]);
+    }
+    expect(Math.max(...improvements)).toBeGreaterThan(0.01); // 至少一轮提升 > 0.01
+    console.log('E2E 4.2 scores:', scores, 'improvements:', improvements);
   });
 
   it('hard violations reach zero by final iteration', async () => {
@@ -1937,24 +2107,42 @@ Part 1 接口全部复用,Task 0 处理了 2 个反哺调整点。
 **Plan:** `docs/superpowers/plans/2026-06-24-crucible-p0-mvp-part2.md` (Part 2 of 2)
 **Branch:** crucible/dev
 **Review date:** 2026-06-24
-**Reviewer:** Claude (self-review,based on Part 1 实测接口反哺)
+**Reviewer:** Claude (plan-eng-review skill,完整 4-section + outside voice)
 
 ### Runs / Status / Findings
 
 | Run | Skill | Status | Findings | Fixed |
 |---|---|---|---|---|
-| 1 | Self-review (spec coverage) | ✅ DONE | 8/8 spec 节覆盖,无 placeholder,类型一致,Part 1 接口全复用 + 2 个反哺调整点(Task 0 处理) | N/A |
+| 1 | Step 0 Scope Challenge | ✅ DONE | 复杂度触发但合理(模块化设计),Part 1 复用充分,无 scope creep | 无需修复 |
+| 2 | Section 1 Architecture | ✅ DONE | A1(workflow score 跟踪 bug,影响验收 4.2), A2(judgeDims.find 重复), A3(judge fan-out 逻辑重复) | A1=A(重构 post-patch score 跟踪), A2=A(Map 查找), A3=A(提取 fanoutJudges 共享函数 + Task 3.5) |
+| 3 | Section 2 Code Quality | ✅ DONE | C1(writeProposal execSync shell 注入), C2(Critic no_duplicate_state 注释缺失), C3(workflow 重复 score 调用性能) | C1=A(execFileSync + 参数数组), C2=A(加注释), C3=deferred P1 |
+| 4 | Section 3 Tests | ✅ DONE | T1(workflow 测试缺 post-patch score 验证), T2(augmented 测试权重硬编码), T3(fanoutJudges 缺独立单测) | T1=A(加单调性测试), T2=nit(可接受), T3=A(Task 3.5 加 5 测试) |
+| 5 | Section 4 Performance | ✅ DONE | P1(18 次 LLM 调用), P2(parseJudgeScore regex), P3(git commit IO) | 全 deferred P1(P0 无 API key 时无差异) |
+| 6 | Outside Voice (Claude 自验,subagent 读取超时降级) | ✅ DONE | Q1(score 单调性语义矛盾:E2E 断言"严格递增"但 P0 降级时 flat), Q2(Task 0 不破坏 Part 1,✅), Q3(fanout.ts import 路径全正确,✅) | Q1=A(改断言为"非递减 + 至少一轮提升 > 0.01") |
 
 ### VERDICT
 
 **PASS (pending execution).**
 
-Part 2 plan 可执行。11 个 TDD task(含 Task 0 接口调整),39 个新测试,覆盖 3 个验收(4.2 分数改进 / 4.3 协同可观测 / 4.4 版本化)。降级方案完备(无 API key / Studio 跑不起来 / git commit 失败 / Mastra 依赖安装失败)。Task 0 处理了 Part 1 → Part 2 的 2 个接口调整(CompiledScorer 导出 + AsyncScorer 接口),不破坏 Part 1。
+Part 2 plan 可执行。12 个 TDD task(含 Task 0 接口调整 + Task 3.5 共享 fanout),44 个新测试(原 39 + T1 加 1 + T3 加 5 - 1 调整),覆盖 3 个验收(4.2 分数改进 / 4.3 协同可观测 / 4.4 版本化)。
 
-**注意:** Part 2 plan 仅做 self-review(未跑完整 plan-eng-review 4-section + outside voice)。如需补审,执行前可跑 `/plan-eng-review`。
+**关键修复:**
+- A1 workflow score 跟踪重构(每轮记 post-patch score,验收 4.2 语义正确)
+- A3 提取 fanoutJudges 共享函数(DRY,Task 4 + Task 9 共用)
+- C1 writeProposal 改 execFileSync(安全,无 shell 注入)
+- Q1 E2E 4.2 断言修正(非递减 + 至少一轮提升,匹配 P0 降级现实)
+- T3 fanoutJudges 直接单测(核心函数早期回归保护)
+
+**Deferred tech debt(写入 TODOS.md,Part 2 完成后):**
+- C3: workflow 重复 score 调用(pre-patch 可只跑确定性,省一半 LLM 调用)— P1
+- P1: 18 次 LLM 调用优化(同 C3)— P1
+- P3: git commit 批量化(多 proposal 一次 commit)— P1
+- T2: augmented 测试权重硬编码(从 Contract 读)— P1 nit
+
+**Outside voice:** Claude 自验(subagent 读取超时降级)。Q1/Q2/Q3 全验证,Q1 发现真问题已修。
 
 **CODEX:** 不可用(codex 不在 PATH)。
 
-**CROSS-MODEL:** N/A。
+**CROSS-MODEL:** N/A(codex 不可用,无 cross-model consensus)。
 
 NO UNRESOLVED DECISIONS
