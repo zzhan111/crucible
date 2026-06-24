@@ -12,8 +12,8 @@
     "yaml": "^2.4.0",
     "zod": "^3.22.0",
     "@mastra/core": "^0.1.0",
-    "ai": "^4.0.0",
-    "@openrouter/ai-sdk-provider": "^0.0.5",
+    "ai": "^6.0.0",
+    "@openrouter/ai-sdk-provider": "^2.9.0",
     "dotenv": "^16.4.0"
   },
   "devDependencies": {
