@@ -84,3 +84,18 @@ secrets/
 # --- Allow submodule-specific ignores ---
 !.gitmodules
 !.gstack/
+
+# ========================================================
+# Crucible project-specific (crucible/dev worktree)
+# ========================================================
+# WSL bash wrapper scripts (gstack env probe + state logging, regenerable)
+.context-save-run.sh
+.context-save-log.sh
+.eng-review-log.sh
+
+# Curator proposals (auto-generated at runtime by Part 2 workflow)
+contracts/proposals/
+
+# Vitest coverage
+coverage/
+.vitest/
