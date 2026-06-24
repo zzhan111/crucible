@@ -18,6 +18,7 @@ export async function detectNovelty(
   knownStates: string[],
   knownNodeTypes?: string[]
 ): Promise<ExpansionProposal[]> {
+  console.log('[Curator] detecting novelty in artifact');
   const proposals: ExpansionProposal[] = [];
 
   // 检测新颖 state tokens

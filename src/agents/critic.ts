@@ -14,6 +14,7 @@ export async function generatePatches(
   report: ScoreReport,
   artifact: Artifact
 ): Promise<ArtifactPatch[]> {
+  console.log('[Critic] analyzing violations for patches');
   const patches: ArtifactPatch[] = [];
   const violations = report.deterministic.violations;
 
