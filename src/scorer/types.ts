@@ -25,3 +25,11 @@ export interface ScoreReport {
 export interface Scorer {
   score(artifact: Artifact): ScoreReport;
 }
+
+/**
+ * AsyncScorer: 异步 Scorer 接口(Part 2 用,因为 judge 调 LLM 是 async)。
+ * Part 1 的 Scorer 是同步的,不改动。Part 2 的 JudgeAugmentedScorer 实现 AsyncScorer。
+ */
+export interface AsyncScorer {
+  score(artifact: Artifact): Promise<ScoreReport>;
+}

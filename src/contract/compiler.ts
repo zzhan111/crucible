@@ -11,7 +11,7 @@ import { sourceTrust } from '../rubric/source_trust.js';
 
 const HARD_VIOLATION_PENALTY = 0.15;
 
-interface CompiledScorer extends Scorer {
+export interface CompiledScorer extends Scorer {
   deterministicPredicateCount: number;
   deterministicRubricCount: number;
 }
