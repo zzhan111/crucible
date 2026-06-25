@@ -20,7 +20,7 @@
 ## 快速开始
 
 ```bash
-# 跑全部测试(99 tests)
+# 跑全部测试(119 tests,含 20 边界 case)
 npm test
 
 # 跑 demo(三段式路演)
