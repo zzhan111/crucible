@@ -13,7 +13,7 @@ const PROPOSALS_DIR = join(__dirname, '..', '..', 'contracts', 'proposals');
 
 describe('P0 acceptance 4.2 — score improves over iterations', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
     if (existsSync(PROPOSALS_DIR)) {
@@ -67,7 +67,7 @@ describe('P0 acceptance 4.2 — score improves over iterations', () => {
 
 describe('P0 acceptance 4.3 — multi-agent coordination observable', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -98,7 +98,7 @@ describe('P0 acceptance 4.3 — multi-agent coordination observable', () => {
 
 describe('P0 acceptance 4.4 — contract versioning via Curator proposals', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
     if (existsSync(PROPOSALS_DIR)) {

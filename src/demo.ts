@@ -20,7 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRACT_PATH = join(__dirname, '..', 'contracts', 'travel-sequence-v1.yaml');
 
 async function main() {
-  const hasApiKey = !!process.env.OPENROUTER_API_KEY;
+  const hasApiKey = !!process.env.OPENAI_API_KEY;
   console.log('='.repeat(70));
   console.log('Crucible P0 Demo — 契约驱动合成引擎');
   console.log('='.repeat(70));

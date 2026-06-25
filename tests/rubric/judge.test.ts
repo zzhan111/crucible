@@ -64,7 +64,7 @@ describe('routingProxy', () => {
 
 describe('judge rubrics (no API key, degraded)', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 

@@ -21,7 +21,7 @@ const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-
 
 describe('QA Phase 3: 边界 case', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });

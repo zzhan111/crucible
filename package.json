@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@openrouter/ai-sdk-provider": "^2.9.0",
+    "@ai-sdk/openai": "^2.0.0",
     "ai": "^6.0.0",
     "dotenv": "^16.4.0",
     "yaml": "^2.4.0",

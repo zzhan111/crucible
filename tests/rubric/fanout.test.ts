@@ -10,7 +10,7 @@ const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-
 
 describe('fanoutJudges (eng-review T3 直接覆盖)', () => {
   beforeEach(() => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 

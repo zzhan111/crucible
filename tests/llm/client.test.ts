@@ -6,32 +6,34 @@ describe('LLM client', () => {
     vi.resetModules();
   });
 
-  it('hasApiKey returns false when OPENROUTER_API_KEY missing', () => {
-    delete process.env.OPENROUTER_API_KEY;
+  it('hasApiKey returns false when OPENAI_API_KEY missing', () => {
+    delete process.env.OPENAI_API_KEY;
     expect(hasApiKey()).toBe(false);
   });
 
   it('hasApiKey returns true when key set', () => {
-    process.env.OPENROUTER_API_KEY = 'sk-test';
+    process.env.OPENAI_API_KEY = 'sk-test';
     expect(hasApiKey()).toBe(true);
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
   });
 
   it('callLLM returns null + warns when no API key', async () => {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await callLLM('test prompt');
     expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/OPENROUTER_API_KEY missing/));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/OPENAI_API_KEY missing/));
     warnSpy.mockRestore();
   });
 
-  it('callLLM returns string or null when API key set (mocked, no real call)', async () => {
-    process.env.OPENROUTER_API_KEY = 'sk-test';
-    const result = await callLLM('Return the word: hello');
-    // 无真实 key 时 callLLM 会尝试网络调用,可能失败返回 null;有 key 时集成测试才验证真实返回
-    // P0 单测只验证不 crash
+  it('callLLM returns string or null when API key set (may fail with invalid key)', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    // 设短超时:无效 key 会触发网络调用,可能慢。用 Promise.race 避免 vitest 5s 超时。
+    const result = await Promise.race([
+      callLLM('Return the word: hello'),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
+    ]);
     expect(result === null || typeof result === 'string').toBe(true);
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
   });
 });
