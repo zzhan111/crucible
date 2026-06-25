@@ -35,9 +35,9 @@ async function main() {
   console.log(`  ${contract.fields.map(f => f.name).join(', ')}`);
   console.log(`Hard constraints: ${contract.hard_constraints.length}`);
   for (const c of contract.hard_constraints) {
-    const detail = c.type === 'declarative' && c.mutex
-      ? `mutex: [${c.mutex.join(', ')}]`
-      : c.rule ?? '';
+    const detail = c.type === 'declarative'
+      ? (c.mutex ? `mutex: [${c.mutex.join(', ')}]` : (c.rule ?? ''))
+      : `code_predicate: ${c.impl}`;
     console.log(`  - ${c.id}: ${detail}`);
   }
   console.log(`Rubric: ${contract.rubric.length} dims`);
