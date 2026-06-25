@@ -1,68 +1,104 @@
-# D:\Apps\traveller
+# Crucible — 契约驱动合成引擎
 
-> traveller project — gstack-installed, ZCode-ready, parallel-development worktree ready.
+> P0 MVP(多智能体协作赛道 demo)
+> Branch: `crucible/dev` | Worktree: `D:\Apps\traveller.crucible-dev`
 
-## What's here
+## 一句话立住
 
-- **`.gstack/`** — git submodule pointing at [`garrytan/gstack`](https://github.com/garrytan/gstack) (v1.58.3.0). The gstack engineering productivity stack: 53+ skills for office-hours, qa, review, ship, browse, design, plan-*, etc.
-- **`.gitignore`** — excludes regenerable gstack state, archives, and OS / editor noise.
-- **`.gitmodules`** — points `.gstack/` at upstream.
+一群智能体不靠聊天、而靠一份可执行契约协同,自动发现缺陷、自动提分。
 
-## gstack state (NOT tracked by git)
+## P0 验收(全达成)
 
-Per `.gitignore`, the following gstack state lives inside `.gstack/state/` but is **excluded** from the parent repo because it is regenerable, per-user, and ephemeral:
+| # | 验收 | 状态 |
+|---|---|---|
+| 4.1 | 三个真实 bug 被确定性 scorer 抓出 | ✅ |
+| 4.2 | 分数改进(非递减 + 至少一轮提升) | ✅ |
+| 4.3 | 多智能体协同可观测(日志 tag) | ✅ |
+| 4.4 | 契约版本化(Curator proposal + 文件) | ✅ |
+| 4.5 | 确定性覆盖(4 谓词 + 2 rubric) | ✅ |
 
-- `state/sessions/` — session mtime files (created by `office-hours` preamble).
-- `state/analytics/` — `skill-usage.jsonl` event log.
-- `state/.gstack/{sessions,analytics,projects,slug-cache}/` — same, but created by the newer gstack versions.
-- `state/developer-profile.json` — accumulated founder signals.
-- `state/.office-hours-e2e-evidence.log` — the human-readable office-hours evidence log.
-- `state/.gstack-verify-final.{log,json}` — verifier audit output (34/34 PASS).
-- `state/.archive/` — archived legacy task artifacts (oh-*.sh, sandbox-homes, .verify.log).
-- `hooks/` — ZCode SessionStart hook (gstack bin/ gstack-state-root-override, gstack-redirect, etc.).
-- `.verify.log` — script-level verification history (202 lines).
-- `.zcode-discover.log` — plugin-loader simulation output.
-
-**To regenerate after a fresh clone:**
+## 快速开始
 
 ```bash
-git clone <this repo> traveller
-cd traveller
-git submodule update --init --recursive
-# Optional: re-run the office-hours skill once to repopulate state/
-# (or run any gstack skill, which writes to its own .gstack/state/)
+# 跑全部测试(99 tests)
+npm test
+
+# 跑 demo(三段式路演)
+npx tsx src/demo.ts
+
+# 跑 demo(有 OpenRouter API key,LLM judge 真实打分)
+OPENROUTER_API_KEY=sk-... npx tsx src/demo.ts
 ```
 
-## Branches & worktrees
+## 架构(Approach D: Mastra-native,不 fork BigSet)
 
-Four worktrees, all branching from the same initial commit:
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Crucible Workflow                     │
+│                                                          │
+│  v1(buggy)                                              │
+│    │                                                     │
+│    ▼                                                     │
+│  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐ │
+│  │ Scorer  │──▶│ Critic  │──▶│ Apply   │──▶│ Curator │ │
+│  │ (det+   │   │ (patch  │   │ Patches │   │ (novelty│ │
+│  │  judge) │   │  gen)   │   │         │   │  detect)│ │
+│  └────┬────┘   └─────────┘   └─────────┘   └────┬────┘ │
+│       │                                         │       │
+│       │   ┌─────────────────────────────────────┘       │
+│       │   │ proposals → contracts/proposals/*.yaml     │
+│       ▼   ▼                                             │
+│  v2(patched)──▶ v3 ──▶ ... (max 3 rounds)              │
+│                                                          │
+│  终止:提升 < 0.01 或达 3 轮                             │
+└─────────────────────────────────────────────────────────┘
 
-| Worktree | Branch | Purpose |
+final_score = deterministic_score * 0.6 + judge_overall * 0.4
+```
+
+## 核心组件
+
+| 组件 | 文件 | 职责 |
 |---|---|---|
-| `D:\Apps\traveller` (this) | `main` | stable / release / default |
-| `D:\Apps\traveller.dev` | `dev` | integration / staging |
-| `D:\Apps\traveller.feature-alpha` | `feature/alpha` | first parallel feature |
-| `D:\Apps\traveller.feature-beta` | `feature/beta` | second parallel feature |
+| Contract v1.0 | `contracts/travel-sequence-v1.yaml` | 好计划的可执行定义(字段+约束+rubric) |
+| Schema | `src/contract/schema.ts` | zod 校验,权重和=1.0 |
+| Compiler | `src/contract/compiler.ts` | Contract → 可执行 Scorer |
+| 4 谓词 | `src/predicates/` | continuity/state_mutex/time_budget/no_duplicate_state |
+| 2 确定性 rubric | `src/rubric/cost_fit.ts` + `source_trust.ts` | 无 LLM |
+| 3 judge rubric | `src/rubric/*.judge.ts` + `fanout.ts` | LLM 评估(routing/memorability/dining_fit) |
+| JudgeAugmentedScorer | `src/scorer/augmented.ts` | 包装确定性 + judge,final=det*0.6+judge*0.4 |
+| Critic | `src/agents/critic.ts` | 违规→确定性 patch |
+| Curator | `src/agents/curator.ts` | 新颖度检测→proposal |
+| Workflow | `src/workflow/crucible.ts` | 3 轮迭代回路 |
+| Fixtures | `src/fixtures/` | hk-3day-golden(无 bug)+ hk-3day-buggy(3 bug) |
 
-`git worktree list` shows the full set.
+## 降级方案
 
-## Verification
+| 场景 | 降级 |
+|---|---|
+| 无 OPENROUTER_API_KEY | judge 返回 neutral 0.5,workflow 仍跑通 |
+| Mastra 不可用 | 用 SimpleAgent(纯 TS),P2 升级 |
+| git commit 失败 | proposal 文件仍写 |
+| LLM 返回非数字 | parseJudgeScore 返回 0.5 |
 
-The `gstack-verify-final.ps1` script (outside this repo, in `%TEMP%`) reads the
-`gstack` plugin cache, the developer's `~/.claude/skills/` symlinks, and
-`D:\Apps\traveller\.gstack\state\` to confirm:
+## 技术债(P1)
 
-- 51 gstack skills are discoverable from `~/.claude/skills/`
-- 53 gstack skills are discoverable from the ZCode plugin cache
-- 34/34 verification checks pass: Phase 2B Q1-Q6, Phase 4.5 signals, Phase 6
-  closing, design doc sections, 4 gstack bin/ scripts executed, zero
-  user-global pollution.
+- state_mutex 升级到相邻节点互斥(当前只查同节点)
+- compiler 支持 code_predicate.impl 动态加载(当前硬编码)
+- workflow pre-patch score 只跑确定性(省一半 LLM 调用)
+- Contract-Author 加 LLM 修订能力(当前只读)
+- Curator 自动合并提议(当前只检测+提议)
+- 冻结黄金集校准 judge
+- Mastra 升级(当前降级为 SimpleAgent)
 
-## Pollution contract
+## 设计文档
 
-- `%USERPROFILE%\.gstack\` (Windows user-global) — **NOT created**.
-- `/home/zhang/.gstack/` (WSL user-global) — **NOT modified** by any of our work.
-- `/mnt/c/Users/zhang/.gstack/` (Windows-from-WSL) — **NOT modified**.
-- All gstack state writes go to `D:\Apps\traveller\.gstack\state\`.
+- Spec: `docs/superpowers/specs/crucible-p0-spec.md`
+- Part 2 Spec: `docs/superpowers/specs/crucible-p0-spec-part2.md`
+- Part 1 Plan: `docs/superpowers/plans/2026-06-23-crucible-p0-mvp.md`(eng-reviewed)
+- Part 2 Plan: `docs/superpowers/plans/2026-06-24-crucible-p0-mvp-part2.md`(eng-reviewed)
+- Context checkpoints: `~/.gstack/projects/traveller.crucible-dev/checkpoints/`
 
-This was confirmed by `C30-C34` in the verifier audit.
+## License
+
+AGPL-3.0(继承 PRD v1.2 §3 决议;Approach D 不 fork BigSet 故不触发衍生义务,P4 商业化时再评估)
