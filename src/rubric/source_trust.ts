@@ -3,12 +3,12 @@ import type { DeterministicRubric, RubricScore } from './types.js';
 
 /**
  * sourceTrust (deterministic): 节点 source_trust 字段(0.0-1.0)等权平均。
- * 无 source_trust 字段按 0.0 计。空 artifact 返回 0.0。
+ * 无 source_trust 字段按 0.0 计。空 artifact 返回 0.5(中性,无证据≠坏)。
  */
 export const sourceTrust: DeterministicRubric = (artifact: Artifact): RubricScore => {
   const nodes = artifact.nodes;
   if (nodes.length === 0) {
-    return { dim: 'source_trust', score: 0.0, mode: 'deterministic', rationale: 'empty artifact' };
+    return { dim: 'source_trust', score: 0.5, mode: 'deterministic', rationale: 'empty artifact (neutral)' };
   }
   let sum = 0;
   let withTrust = 0;

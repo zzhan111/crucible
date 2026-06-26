@@ -24,8 +24,12 @@ export const routingJudge: JudgeRubric = async (ctx: JudgeContext) => {
   const proxy = ctx.proxy_value ?? routingProxy(ctx.artifact);
   const prompt = `You are evaluating a travel itinerary's routing smoothness.
 Proxy metric (bridge coverage): ${proxy.toFixed(2)}
-Nodes: ${JSON.stringify(ctx.artifact.nodes.map(n => ({ action: n.action, node_type: n.node_type, route: n.route })))}
-Rate the routing smoothness on a scale of 0.0 to 1.0. Consider: are transitions natural? Any backtracking? Realistic travel times?
+Nodes: ${JSON.stringify(ctx.artifact.nodes.map(n => ({ action: n.action, node_type: n.node_type, route: n.route, cost: n.cost, source_trust: n.source_trust })), null, 2)}
+Rate the routing smoothness on a scale of 0.0 to 1.0. Consider:
+- Are transitions natural? Any backtracking (going east then back west)?
+- Realistic travel times? Reasonable costs?
+- Well-sourced routes (source_trust > 0.7) are more trustworthy = slightly higher
+- Backtracking or excessive taxi costs (¥350+) significantly lower the score
 Respond with only a number between 0 and 1.`;
   const raw = await callLLM(prompt);
   const score = parseJudgeScore(raw, 'routing');

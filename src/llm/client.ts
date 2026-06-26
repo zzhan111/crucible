@@ -27,10 +27,11 @@ export async function callLLM(prompt: string): Promise<string | null> {
     const model = process.env.OPENAI_MODEL || 'gpt-4o';
     // 用 .chat() 而非默认的 .responses()(新版 API),
     // 第三方兼容服务只支持 /chat/completions,用 .responses() 会 404。
+    // 注: reasoning models(如 deepseek-v4-flash)不支持 temperature,
+    // 故不设 temperature 让模型用默认值(避免兼容性警告)。
     const result = await generateText({
       model: openai.chat(model),
       prompt,
-      temperature: 0.2,
     });
     return result.text;
   } catch (err) {

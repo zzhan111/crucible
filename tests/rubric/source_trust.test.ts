@@ -39,9 +39,9 @@ describe('sourceTrust', () => {
     expect(r.rationale).toMatch(/0\/2 nodes/);
   });
 
-  it('handles empty artifact', () => {
+  it('handles empty artifact (neutral 0.5)', () => {
     const r = sourceTrust({ family: 'sequence', nodes: [] });
-    expect(r.score).toBe(0.0);
+    expect(r.score).toBe(0.5); // P1: 空 artifact 无证据 ≠ 坏 → 中性 0.5
   });
 
   it('returns 1.0 when all nodes have source_trust 1.0', () => {

@@ -33,7 +33,9 @@ describe('QA Phase 3: 边界 case', () => {
       const empty: Artifact = { family: 'sequence', nodes: [] };
       const report = scorer.score(empty);
       expect(report.deterministic.hard_violation_count).toBe(0);
-      expect(report.deterministic.deterministic_score).toBe(1.0);
+      // P1: det_score = violation_factor(1.0) * rubric_avg(0.5 neutral) = 0.5
+      // 空 artifact 无 source/cost 证据 → rubric 中性 → det_score 0.5
+      expect(report.deterministic.deterministic_score).toBe(0.5);
     });
 
     it('Critic generatePatches on empty artifact', async () => {

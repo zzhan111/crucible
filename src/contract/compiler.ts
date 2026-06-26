@@ -76,10 +76,15 @@ export function compileContract(contract: Contract): CompiledScorer {
       for (const p of predicates) allViolations.push(...p(artifact));
       const hardViolations = allViolations.filter(v => v.severity === 'hard');
       const rubricScores = rubrics.map(r => r(artifact));
-      const deterministicScore = Math.max(
-        0,
-        1 - hardViolations.length * HARD_VIOLATION_PENALTY
-      );
+      // P1 修复: deterministic_score = violation_penalty * rubric_avg
+      // 之前只算 violation penalty(所有无违规工件 = 1.0,无法区分质量)。
+      // 现在乘以 deterministic rubric 平均值(source_trust + cost_fit),
+      // 让 source/cost 差异体现在 det_score 中(judge 校准才有区分度)。
+      const rubricAvg = rubricScores.length > 0
+        ? rubricScores.reduce((acc, r) => acc + r.score, 0) / rubricScores.length
+        : 1.0;
+      const violationFactor = Math.max(0, 1 - hardViolations.length * HARD_VIOLATION_PENALTY);
+      const deterministicScore = Math.max(0, violationFactor * rubricAvg);
       return {
         deterministic: {
           violations: allViolations,
