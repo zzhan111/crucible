@@ -1,0 +1,7 @@
+{
+  "created_at": "2026-06-25T11:20:00.000Z",
+  "ranking": ["fc-a", "hk-a", "yn-a", "hk-b", "yn-b", "fc-b", "hk-c", "yn-c"],
+  "dimension": "整体感受(综合时间/动线/记忆点/餐饮/来源)",
+  "method": "pairwise comparison via AskUserQuestion (10 rounds, merge sort + tie resolution)",
+  "notes": "fc-a 胜出 high 组(赶海记忆点强);hk-a > yn-a(多交通衔接更完整);yn-a > hk-b(高梯度压中);hk-b > yn-b(有龙脊);yn-b > fc-b(木府记忆点);fc-b > hk-c(动线直无折返);hk-c > yn-c(去了2个点)"
+}
