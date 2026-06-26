@@ -1,29 +1,31 @@
 import type { Artifact, Predicate, Violation } from './types.js';
 
+const CLEARING_TYPES = new Set(['switch', 'buffer']);
+
 /**
  * makeStateMutex: 工厂,接收 mutex token 列表,返回 Predicate。
- * 规则:同一节点内不能同时持有两个 mutex token。
- * P0 只检查同节点互斥。相邻节点互斥留 P1。
  *
- * 注(outside-voice #12):签名用 string[] 而非 [string, string] tuple,
- * 因为 Contract YAML 的 mutex 字段是数组,可能含 2+ token。
- * P0 只取前 2 个检查(见 compiler 调用处),多于 2 个的 token 在 P0 被忽略。
+ * P1 升级(eng-review A2 技术债偿还):
+ * - 同节点互斥:同一节点内不能同时持有两个 mutex token(P0 已有,保留)
+ * - 相邻节点互斥:相邻节点不能分别持有互斥 token,除非中间有 clearing transition(switch/buffer)
+ *   例如:节点 0 持有 luggage_drop,节点 1 持有 depart_from_hotel → 违规(先寄存后出发,互斥)
+ *   除非节点 0 和 1 之间有 switch/buffer 清除 state
  *
- * 技术债(eng-review A2):P0 只检查同节点互斥。PRD §6 原意是"相邻节点互斥"——
- * 真实旅游里 luggage_drop 和 depart_from_hotel 出现在相邻节点(先寄存后出发),
- * 而非同一节点。P0 buggy fixture 被迫把两个 state 塞同一节点触发违规,demo 真实性打折。
- * P1 升级路径:定义 clearing transition 语义(node_type 为 switch/buffer 清除 state),
- * 实现相邻节点互斥检查,重做 fixture 让 bug 贴近 q-traveller §7 真实场景。
+ * 注(outside-voice #12):签名用 string[] 而非 tuple,Contract YAML 的 mutex 字段是数组。
+ * P1 仍只取前 2 个检查。
  */
 export function makeStateMutex(mutexTokens: string[]): Predicate {
   if (mutexTokens.length < 2) {
-    return () => []; // 不足 2 个 token,无法构成互斥对,返回 noop
+    return () => [];
   }
   const a = mutexTokens[0];
   const b = mutexTokens[1];
   return (artifact: Artifact): Violation[] => {
     const violations: Violation[] = [];
-    artifact.nodes.forEach((node, idx) => {
+    const nodes = artifact.nodes;
+
+    // 检查 1:同节点互斥(P0 保留)
+    nodes.forEach((node, idx) => {
       const states = Array.isArray(node.state) ? node.state.map(String) : [];
       if (states.includes(a) && states.includes(b)) {
         violations.push({
@@ -35,6 +37,30 @@ export function makeStateMutex(mutexTokens: string[]): Predicate {
         });
       }
     });
+
+    // 检查 2:相邻节点互斥(P1 新增)
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const nodeA = nodes[i];
+      const nodeB = nodes[i + 1];
+      const aClears = CLEARING_TYPES.has(String(nodeA.node_type ?? ''));
+      const bClears = CLEARING_TYPES.has(String(nodeB.node_type ?? ''));
+      if (aClears || bClears) continue; // 有 clearing,不检查
+
+      const statesA = new Set(Array.isArray(nodeA.state) ? nodeA.state.map(String) : []);
+      const statesB = new Set(Array.isArray(nodeB.state) ? nodeB.state.map(String) : []);
+
+      // 节点 A 持有 a,节点 B 持有 b(或反过来)
+      if ((statesA.has(a) && statesB.has(b)) || (statesA.has(b) && statesB.has(a))) {
+        violations.push({
+          constraint_id: 'state_mutex',
+          severity: 'hard',
+          message: `adjacent nodes ${i} and ${i + 1} hold mutex states across nodes: ${a} and ${b}`,
+          location: { node_index: i, node_index_end: i + 1, field: 'state' },
+          fix_hint: `insert a switch/buffer node between them, or remove one mutex state`,
+        });
+      }
+    }
+
     return violations;
   };
 }

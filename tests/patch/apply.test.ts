@@ -55,18 +55,22 @@ describe('applyPatches', () => {
     expect(result.nodes[0].state).toEqual([]);
   });
 
-  it('applies multiple patches in order (inserts affect later indices)', () => {
+  it('applies multiple patches in order (non-insert first, then insert descending)', () => {
     const artifact: Artifact = {
       family: 'sequence',
       nodes: [{ action: 'a' }, { action: 'b' }],
     };
     const patches: ArtifactPatch[] = [
       { type: 'insert', after_index: 0, node: { action: 'mid' }, reason: 'x' },
-      { type: 'update_field', index: 1, field: 'action', value: 'mid-renamed', reason: 'y' },
+      { type: 'update_field', index: 1, field: 'action', value: 'b-renamed', reason: 'y' },
     ];
     const result = applyPatches(artifact, patches);
-    // after insert: [a, mid, b]; index 1 is now 'mid' → renamed
-    expect(result.nodes[1].action).toBe('mid-renamed');
+    // P1: non-insert 先执行(update_field index 1 → b-renamed),
+    // 然后 insert 降序插入(insert after 0 → [a, mid, b-renamed])
+    expect(result.nodes).toHaveLength(3);
+    expect(result.nodes[0].action).toBe('a');
+    expect(result.nodes[1].action).toBe('mid');
+    expect(result.nodes[2].action).toBe('b-renamed');
   });
 
   it('returns artifact unchanged for empty patches', () => {

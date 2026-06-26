@@ -37,6 +37,8 @@ describe('P0 acceptance 4.1 — 3 bugs must be caught by deterministic scorer', 
     expect(mutexV).toHaveLength(1);
     expect(mutexV[0].message).toMatch(/luggage_drop/);
     expect(mutexV[0].message).toMatch(/depart_from_hotel/);
+    // P1: 相邻节点互斥(不再是同节点)
+    expect(mutexV[0].message).toMatch(/adjacent/);
   });
 
   it('buggy artifact catches no_duplicate_state violation (Bug 3)', () => {
@@ -78,11 +80,13 @@ describe('P0 acceptance 4.1 — 3 bugs must be caught by deterministic scorer', 
     expect(v!.fix_hint).toMatch(/transit|switch/i);
   });
 
-  it('state_mutex violation points to node 0 (holds both mutex tokens)', () => {
+  it('state_mutex violation points to node 0→1 (adjacent mutex across nodes)', () => {
     const report = scorer.score(hk3dayBuggy);
     const v = report.deterministic.violations.find(v => v.constraint_id === 'state_mutex');
     expect(v).toBeDefined();
+    // P1: 相邻节点互斥,node_index=0, node_index_end=1
     expect(v!.location.node_index).toBe(0);
+    expect(v!.location.node_index_end).toBe(1);
     expect(v!.location.field).toBe('state');
   });
 
