@@ -10,11 +10,14 @@ import type { ArtifactPatch } from './types.js';
  * 这样所有 patch 的 index 都对应原 artifact,不会错位。
  */
 export function applyPatches(artifact: Artifact, patches: ArtifactPatch[]): Artifact {
-  // 分离 insert 和非 insert
-  const inserts: ArtifactPatch[] = [];
-  const others: ArtifactPatch[] = [];
+  // 分离 insert 和非 insert(TS 友好:用类型谓词收窄)
+  type InsertPatch = Extract<ArtifactPatch, { type: 'insert' }>;
+  type NonInsertPatch = Exclude<ArtifactPatch, { type: 'insert' }>;
+  const isInsert = (p: ArtifactPatch): p is InsertPatch => p.type === 'insert';
+  const inserts: InsertPatch[] = [];
+  const others: NonInsertPatch[] = [];
   for (const p of patches) {
-    if (p.type === 'insert') inserts.push(p);
+    if (isInsert(p)) inserts.push(p);
     else others.push(p);
   }
 
@@ -40,9 +43,9 @@ export function applyPatches(artifact: Artifact, patches: ArtifactPatch[]): Arti
 
   // 第二步: 按 after_index 降序执行 insert(降序避免同一轮 insert 之间的索引干扰)
   // 降序确保每次插入都在正确位置:因为插入后面的位置不会影响前面的 after_index
-  const sortedInserts = [...inserts].sort((a, b) => (b.after_index ?? 0) - (a.after_index ?? 0));
+  const sortedInserts = [...inserts].sort((a, b) => b.after_index - a.after_index);
   for (const patch of sortedInserts) {
-    const idx = patch.after_index ?? 0;
+    const idx = patch.after_index;
     nodes = [...nodes.slice(0, idx + 1), patch.node, ...nodes.slice(idx + 1)];
   }
 
