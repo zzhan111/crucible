@@ -20,9 +20,6 @@ export async function callLLM(prompt: string): Promise<string | null> {
     const openai = createOpenAI({
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-      // compatibility: 'compatible' 强制用 /chat/completions(旧版 OpenAI API),
-      // 兼容第三方服务(DeepSeek/火山方舟/vLLM 等只支持 chat completions)。
-      compatibility: 'compatible',
     });
     const model = process.env.OPENAI_MODEL || 'gpt-4o';
     // 用 .chat() 而非默认的 .responses()(新版 API),
