@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadContract } from '../../src/contract/validate.js';
@@ -19,10 +19,23 @@ const INTEL_CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'intel-tabl
 /**
  * P1 验收标准 §3.1-3.6 逐项核对。
  * 这是从 spec §3 直接翻译的集成验收测试。
+ *
+ * 注:这些测试用降级模式(无 API key)跑,验证结构正确性。
+ * 真实 LLM τ 阈值验证由手动脚本完成(需 API 余额)。
  */
 describe('P1 验收标准核对 (§3.1-3.6)', () => {
   const travelContract = loadContract(TRAVEL_CONTRACT_PATH);
   const travelScorer = compileContract(travelContract);
+
+  // 降级模式:避免真实 LLM 调用(余额/速度/稳定性),验证结构正确性
+  let savedKey: string | undefined;
+  beforeEach(() => {
+    savedKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+  afterEach(() => {
+    if (savedKey !== undefined) process.env.OPENAI_API_KEY = savedKey;
+  });
 
   // §3.1 分数上升曲线
   describe('§3.1 分数上升曲线', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadContract } from '../../src/contract/validate.js';
@@ -13,6 +13,17 @@ const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-
 describe('P1 §2.7 champion-challenger A/B', () => {
   const championContract = loadContract(CONTRACT_PATH);
   const championScorer = compileContract(championContract);
+
+  // A/B 测试跑 16+ 次 LLM 调用,用降级模式避免真实 LLM(余额/速度/稳定性)
+  // 真实 LLM A/B 验证由专门的手动脚本完成
+  let savedKey: string | undefined;
+  beforeEach(() => {
+    savedKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+  afterEach(() => {
+    if (savedKey !== undefined) process.env.OPENAI_API_KEY = savedKey;
+  });
 
   it('runABComparison 返回完整 ABResult', async () => {
     // challenger = champion 加一个约束(无实际影响,因黄金集无 beach)

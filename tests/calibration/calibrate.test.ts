@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadContract } from '../../src/contract/validate.js';
@@ -12,6 +12,17 @@ const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-
 describe('P1 §2.4 judge 校准', () => {
   const contract = loadContract(CONTRACT_PATH);
   const baseScorer = compileContract(contract);
+
+  // 降级模式:避免真实 LLM 调用(24 次/测试 × 7 测试),验证结构正确性。
+  // 真实 LLM τ 阈值验证由手动脚本完成。
+  let savedKey: string | undefined;
+  beforeEach(() => {
+    savedKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+  afterEach(() => {
+    if (savedKey !== undefined) process.env.OPENAI_API_KEY = savedKey;
+  });
 
   it('runJudgeCalibration 返回完整 CalibrationReport', async () => {
     const report = await runJudgeCalibration(contract, baseScorer);
