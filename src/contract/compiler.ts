@@ -6,8 +6,13 @@ import { continuity } from '../predicates/continuity.js';
 import { makeStateMutex } from '../predicates/state_mutex.js';
 import { timeBudget } from '../predicates/time_budget.js';
 import { noDuplicateState } from '../predicates/no_duplicate_state.js';
+import { noEmptySource } from '../predicates/no_empty_source.js';
+import { pricingFormat } from '../predicates/pricing_format.js';
+import { noDuplicateCompetitor } from '../predicates/no_duplicate_competitor.js';
 import { costFit } from '../rubric/cost_fit.js';
 import { sourceTrust } from '../rubric/source_trust.js';
+import { coverage } from '../rubric/coverage.js';
+import { freshness } from '../rubric/freshness.js';
 
 const HARD_VIOLATION_PENALTY = 0.15;
 
@@ -40,8 +45,12 @@ export function compileContract(contract: Contract): CompiledScorer {
         break;
       case 'time_budget': predicates.push(timeBudget); break;
       case 'no_duplicate_state': predicates.push(noDuplicateState); break;
+      // P1 §2.8 跨族探针:情报表族谓词
+      case 'no_empty_source': predicates.push(noEmptySource); break;
+      case 'pricing_format': predicates.push(pricingFormat); break;
+      case 'no_duplicate_competitor': predicates.push(noDuplicateCompetitor); break;
       default:
-        // 未知约束 P0 跳过(P1 支持 code_predicate impl 加载)
+        // 未知约束跳过(P1 支持 code_predicate impl 加载)
         break;
     }
   }
@@ -52,6 +61,9 @@ export function compileContract(contract: Contract): CompiledScorer {
     switch (r.dim) {
       case 'cost_fit': rubrics.push(costFit); break;
       case 'source_trust': rubrics.push(sourceTrust); break;
+      // P1 §2.8 跨族探针:情报表族 rubric
+      case 'coverage': rubrics.push(coverage); break;
+      case 'freshness': rubrics.push(freshness); break;
       default: break;
     }
   }

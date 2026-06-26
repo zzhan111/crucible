@@ -1,0 +1,55 @@
+# 情报表族 Contract v1 (P1 §2.8 跨族探针)
+# 测试同一套 DSL(字段+约束+rubric 结构)能否跨族使用。
+# 工件 = 竞品情报表,每行是一个 competitor 数据条目(节点 = 行)。
+metadata:
+  version: 1
+  family_note: "cross-family probe: intel table"
+
+artifact_family: table
+
+fields:
+  - name: competitor_name
+    type: string
+    required: true
+  - name: feature
+    type: string
+    required: true
+  - name: pricing
+    type: string
+    required: true
+  - name: source
+    type: string
+    required: true
+  - name: source_trust
+    type: number
+    required: true
+  - name: last_verified
+    type: string
+    required: true
+
+hard_constraints:
+  - id: no_empty_source
+    type: declarative
+    rule: "每行必须有非空 source 字段"
+  - id: pricing_format
+    type: declarative
+    rule: "pricing 字段必须含数字或'免费',不能是空/未知"
+  - id: no_duplicate_competitor
+    type: declarative
+    rule: "competitor_name 不能重复(同一竞品不重复列)"
+
+rubric:
+  - dim: coverage
+    weight: 0.4
+    mode: deterministic
+  - dim: freshness
+    weight: 0.3
+    mode: deterministic
+  - dim: source_trust
+    weight: 0.3
+    mode: deterministic
+
+calibration:
+  frozen_golden_set: "(P1 探针不建黄金集,留 P2)"
+  metric: kendall_tau
+  human_ceiling: "n/a (cross-family probe)"

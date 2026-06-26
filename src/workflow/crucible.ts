@@ -56,8 +56,10 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
     console.log(`\n[Workflow] === Iteration ${i + 1}/${MAX_ITERATIONS} ===`);
 
     // 1. Score(pre-patch,用于 Critic 读 violations)
-    console.log('[Workflow] Step 1: Scorer (pre-patch)');
-    const prePatchReport = await scorerRun(currentArtifact, input.baseScorer, input.contract);
+    // eng-review C3 (P1 §2.9): Critic 只读 deterministic.violations,不需要 judge。
+    // 用 baseScorer(纯确定性)而非 scorerRun(含 LLM judge),省一半 LLM 调用。
+    console.log('[Workflow] Step 1: Scorer (pre-patch, deterministic only)');
+    const prePatchReport = input.baseScorer.score(currentArtifact);
 
     // 2. Critic(读 pre-patch violations,生成 patch)
     console.log('[Workflow] Step 2: Critic');
