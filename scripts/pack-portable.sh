@@ -34,9 +34,21 @@ mkdir -p "$STAGE"
 
 # ── 顶层文件(白名单) ─────────────────────────────────
 for f in package.json package-lock.json tsconfig.json vitest.config.ts \
-         .npmrc .env.example README.md .gitignore; do
+         .npmrc .env.example .mcp.json README.md .gitignore; do
   [[ -f "$ROOT/$f" ]] && cp "$ROOT/$f" "$STAGE/"
 done
+# .mcp.json 里的 args 用了本机绝对路径,portable 包要改成相对路径(任何机器可用)。
+# 用 node 跨平台替换,避免 sed 在 Windows/Mac 行为差异。
+if [[ -f "$STAGE/.mcp.json" ]]; then
+  node -e "
+    const fs=require('fs'),p=process.argv[1];
+    const j=JSON.parse(fs.readFileSync(p,'utf8'));
+    for(const s of Object.values(j.mcpServers||{})){
+      if(Array.isArray(s.args)) s.args=s.args.map(a=>a.replace(/^[^ ]*\/scripts\//,'scripts/'));
+    }
+    fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');
+  " "$STAGE/.mcp.json"
+fi
 
 # ── 顶层目录(整目录拷贝,排除生成物) ───────────────────
 # src/ tests/ contracts/ golden/ scripts/ docs/ 全部纯源码,直接拷
