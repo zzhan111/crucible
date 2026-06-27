@@ -41,6 +41,9 @@ out/
 *.so
 *.dylib
 
+# --- Generated demo report (regenerable via npx tsx src/demo-html.ts) ---
+demo-report.html
+
 # --- OS / temp ---
 *.tmp
 *.bak
