@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "crucible": {
+      "command": "node",
+      "args": ["D:/Apps/traveller.crucible-dev/scripts/run-mcp.mjs"],
+      "env": {}
+    }
+  }
+}
