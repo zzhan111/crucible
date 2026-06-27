@@ -4,6 +4,7 @@ import type { Artifact } from '../predicates/types.js';
 import type { RubricScore } from '../rubric/types.js';
 import type { ScoreReport, AsyncScorer } from './types.js';
 import { fanoutJudges } from '../rubric/fanout.js';
+import { getScorerCache, scorerCacheKey } from '../cache/scorer-cache.js';
 
 const JUDGE_WEIGHT_IN_FINAL = 0.4;
 
@@ -12,17 +13,28 @@ const JUDGE_WEIGHT_IN_FINAL = 0.4;
  * 实现 AsyncScorer 接口(score 返回 Promise)。
  * final_score = deterministic_score * 0.6 + judge_overall * 0.4
  *
- * 注(eng-review A3):judge fan-out 逻辑委托给共享函数 fanoutJudges,
- * Task 9 的 judgeFanOut Agent 也调用同一函数,避免重复。
+ * P3 §2.2: 集成 Scorer 缓存。同工件+同契约版本第二次打分命中缓存(不重算)。
+ * 缓存 key = hash(artifact + contract_version),TTL 10 分钟。
+ *
+ * 注(eng-review A3):judge fan-out 逻辑委托给共享函数 fanoutJudges。
  */
 export function createJudgeAugmentedScorer(
   baseScorer: CompiledScorer,
   contract: Contract
 ): AsyncScorer {
   const judgeDims = contract.rubric.filter(r => r.mode === 'judge' || r.mode === 'proxy+judge');
+  const contractVersion = (contract as Contract & { metadata?: { version?: number } }).metadata?.version ?? 'v1';
 
   return {
     async score(artifact: Artifact): Promise<ScoreReport> {
+      // P3 §2.2: 查缓存
+      const cache = getScorerCache();
+      const key = scorerCacheKey(artifact, contractVersion);
+      const cached = cache.get(key);
+      if (cached) {
+        return cached;
+      }
+
       // 1. 跑确定性部分(Part 1,同步)
       const baseReport = baseScorer.score(artifact);
 
@@ -44,7 +56,7 @@ export function createJudgeAugmentedScorer(
       const deterministicScore = baseReport.deterministic.deterministic_score;
       const finalScore = deterministicScore * (1 - JUDGE_WEIGHT_IN_FINAL) + judgeOverall * JUDGE_WEIGHT_IN_FINAL;
 
-      return {
+      const report: ScoreReport = {
         deterministic: baseReport.deterministic,
         judge: {
           rubric_scores: judgeScores,
@@ -52,6 +64,11 @@ export function createJudgeAugmentedScorer(
         },
         final_score: finalScore,
       };
+
+      // P3 §2.2: 存缓存
+      cache.set(key, report);
+
+      return report;
     },
   };
 }
