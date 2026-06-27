@@ -9,6 +9,7 @@ import { noDuplicateState } from '../predicates/no_duplicate_state.js';
 import { noEmptySource } from '../predicates/no_empty_source.js';
 import { pricingFormat } from '../predicates/pricing_format.js';
 import { noDuplicateCompetitor } from '../predicates/no_duplicate_competitor.js';
+import { makeSandboxedPredicate } from './sandbox.js';
 import { costFit } from '../rubric/cost_fit.js';
 import { sourceTrust } from '../rubric/source_trust.js';
 import { coverage } from '../rubric/coverage.js';
@@ -36,6 +37,11 @@ export interface CompiledScorer extends Scorer {
 export function compileContract(contract: Contract): CompiledScorer {
   const predicates: Predicate[] = [];
   for (const c of contract.hard_constraints) {
+    // P2 §2.1: code_predicate 用沙箱动态加载(isolated-vm)
+    if (c.type === 'code_predicate') {
+      predicates.push(makeSandboxedPredicate(c.impl));
+      continue;
+    }
     switch (c.id) {
       case 'continuity': predicates.push(continuity); break;
       case 'state_mutex':
@@ -50,7 +56,7 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'pricing_format': predicates.push(pricingFormat); break;
       case 'no_duplicate_competitor': predicates.push(noDuplicateCompetitor); break;
       default:
-        // 未知约束跳过(P1 支持 code_predicate impl 加载)
+        // 未知 declarative 约束跳过
         break;
     }
   }
