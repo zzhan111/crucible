@@ -4,6 +4,8 @@ import type { Artifact } from '../predicates/types.js';
 import type { ScoreReport } from '../scorer/types.js';
 import type { ArtifactPatch } from '../patch/types.js';
 import type { DB } from '../persistence/db.js';
+import type { Actor } from '../auth/rbac.js';
+import { SYSTEM_ACTOR } from '../auth/rbac.js';
 import { scorerRun } from '../agents/scorer.js';
 import { generatePatches } from '../agents/critic.js';
 import { detectNovelty } from '../agents/curator.js';
@@ -26,6 +28,11 @@ export interface CrucibleRunInput {
    * 测试可注入 :memory: DB 验证落库;生产靠 env 开关。
    */
   auditDb?: DB;
+  /**
+   * P4.2 RBAC:操作者标识(谁触发这次 workflow)。未传 → SYSTEM_ACTOR(system/admin)。
+   * actor.id 落入 score_runs.actor_id,审计可追溯"谁评分"。
+   */
+  actor?: Actor;
 }
 
 export interface CrucibleIteration {
@@ -61,6 +68,8 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
   let lastPostPatchScore = 0;
   // P4.1: 审计落库(显式注入优先,否则读 env;未开 → null,行为零变化)
   const auditDb = input.auditDb !== undefined ? input.auditDb : openAuditDB();
+  // P4.2: 操作者(未传 → SYSTEM_ACTOR,向后兼容)
+  const actor = input.actor ?? SYSTEM_ACTOR;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     console.log(`\n[Workflow] === Iteration ${i + 1}/${MAX_ITERATIONS} ===`);
@@ -87,8 +96,9 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
     // P4.1 审计轨迹:落库 post-patch 评分(最终判定分,含 judge)。
     // pre-patch(确定性 only)不落库 — 审计关注判定结果,不是中间诊断。
     // auditDb 为 null(未设 CRUCIBLE_DB_PATH)时跳过,行为零变化。
+    // P4.2: 传 actor,记"谁触发的评分"。
     if (auditDb) {
-      persistScoreRun(auditDb, postPatchArtifact, input.contract, postPatchReport);
+      persistScoreRun(auditDb, postPatchArtifact, input.contract, postPatchReport, actor);
     }
 
     // 记录本轮:artifact 是 pre-patch 的(展示原始输入),score 是 post-patch 的(展示修复效果)

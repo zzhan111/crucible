@@ -105,14 +105,16 @@ describe('P3.5 §2.2 SQLite 持久化层', () => {
       expect(got!.judge!.overall_score).toBe(0.6);
     });
 
-    it('artifact_hash 唯一性: 同 artifact+contract 只存最新(OR REPLACE)', () => {
+    it('P4.2 append-only: 同 artifact+contract 重评分全留(不再 OR REPLACE)', () => {
+      // P3.5 用 INSERT OR REPLACE 只留最新;P4.2 改 append-only — 重评分全留,审计可追溯历史。
       insertContract(db, { version: 1, family: 'sequence', yaml_text: 'a' });
       insertScoreRun(db, sampleArtifact, 1, sampleScoreReport(0.5));
       insertScoreRun(db, sampleArtifact, 1, sampleScoreReport(0.8));
-      const got = getScoreRun(db, sampleArtifact, 1);
-      expect(got!.deterministic.deterministic_score).toBe(0.8);
       const count = (db.prepare('SELECT COUNT(*) c FROM score_runs').get() as { c: number }).c;
-      expect(count).toBe(1);
+      expect(count).toBe(2); // 两次都保留
+      // getScoreRun 取一条(LIMIT 1,最新;同秒插入顺序不保证,只验是两者之一)
+      const got = getScoreRun(db, sampleArtifact, 1);
+      expect([0.5, 0.8]).toContain(got!.deterministic.deterministic_score);
     });
 
     it('不同 artifact_hash 不冲突', () => {

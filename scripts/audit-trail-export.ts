@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { openAndMigrate } from '../src/persistence/db.js';
-import { getArtifactAuditTrail } from '../src/persistence/audit.js';
+import { getArtifactAuditTrail, getActivityLog } from '../src/persistence/audit.js';
 import { exportAuditJson, exportAuditMarkdown } from '../src/audit/export.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,13 +40,17 @@ function main(): void {
     options: {
       artifact: { type: 'string' },
       out: { type: 'string', default: 'docs/audit' },
+      tenant: { type: 'string', default: 'default' },
+      actor: { type: 'string' },        // P4.2: 按操作者过滤
+      since: { type: 'string' },        // P4.2: 时间窗起始(含)
+      until: { type: 'string' },        // P4.2: 时间窗截止(含)
     },
     strict: true,
   });
 
   if (!values.artifact) {
     console.error('错误: 缺少 --artifact <工件.json>');
-    console.error('用法: npx tsx scripts/audit-trail-export.ts --artifact <工件.json> [--out docs/audit]');
+    console.error('用法: npx tsx scripts/audit-trail-export.ts --artifact <工件.json> [--out docs/audit] [--tenant default] [--actor <id>] [--since <ts>] [--until <ts>]');
     process.exit(1);
   }
 
@@ -64,14 +68,22 @@ function main(): void {
     process.exit(1);
   }
   const artifact = JSON.parse(readFileSync(artifactPath, 'utf8'));
+  const tenant = values.tenant ?? 'default';
 
   const db = openAndMigrate(dbPath);
-  const trail = getArtifactAuditTrail(db, artifact);
+  const trail = getArtifactAuditTrail(db, artifact, tenant);
+  // P4.2: 全量活动日志(支持 actor/时间窗过滤)— 一并导出,让审计报告含"谁在何时做了什么"
+  const activityLog = getActivityLog(db, {
+    tenantId: tenant,
+    actorId: values.actor,
+    since: values.since,
+    until: values.until,
+  });
   db.close();
 
   if (!trail) {
-    console.log(`该工件无评分记录(artifact_hash 未在 ${dbPath} 中找到)。`);
-    console.log('可能原因:还没跑过 workflow,或工件 JSON 与评分时不一致(影响 hash)。');
+    console.log(`该工件无评分记录(artifact_hash 未在 ${dbPath} 中找到,tenant=${tenant})。`);
+    console.log('可能原因:还没跑过 workflow,或工件 JSON 与评分时不一致(影响 hash),或 tenant 不匹配。');
     process.exit(0); // 非错误
   }
 
@@ -83,12 +95,14 @@ function main(): void {
   const mdPath = join(outDir, `${base}.md`);
 
   writeFileSync(jsonPath, exportAuditJson(trail), 'utf8');
-  writeFileSync(mdPath, exportAuditMarkdown(trail), 'utf8');
+  writeFileSync(mdPath, exportAuditMarkdown(trail, activityLog), 'utf8');
 
   console.log('=== 审计轨迹导出完成 ===');
   console.log(`工件 hash:    ${trail.artifact_hash}`);
   console.log(`评分次数:     ${trail.runs.length}`);
   console.log(`契约版本:     ${trail.runs.map(r => 'v' + r.contract_version).join(', ')}`);
+  console.log(`操作者:       ${trail.runs.map(r => r.actor_id ?? 'system').filter((v, i, a) => a.indexOf(v) === i).join(', ')}`);
+  console.log(`活动日志条数: ${activityLog.length}`);
   console.log(`JSON 报告:    ${jsonPath}`);
   console.log(`Markdown 报告: ${mdPath}`);
 }

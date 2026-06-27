@@ -84,13 +84,15 @@ describe('P4.1 审计轨迹:写接入 + 查询层', () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].contract_version).toBe(1);
     });
-    it('幂等:同工件同契约重跑不累积(INSERT OR REPLACE)', () => {
+    it('P4.2 append-only:同工件同契约重跑全留(审计可追溯重评分历史)', () => {
+      // P3.5 用 INSERT OR REPLACE 只留最新;P4.2 改 append-only — 重评分全留,可追溯。
       const c = makeContract(1);
       persistScoreRun(db, sampleArtifact, c, sampleScoreReport(0.5));
       persistScoreRun(db, sampleArtifact, c, sampleScoreReport(0.9));
       const rows = listScoreRunsForArtifact(db, sampleArtifact);
-      expect(rows).toHaveLength(1);
-      expect(rows[0].det_score).toBe(0.9);
+      expect(rows).toHaveLength(2);
+      // 两次评分都保留(同秒插入时 created_at 相同,顺序不保证 — 只验内容存在)
+      expect(rows.map(r => r.det_score).sort()).toEqual([0.5, 0.9]);
     });
     it('不同契约版本各留一条(审计能看到演化)', () => {
       persistScoreRun(db, sampleArtifact, makeContract(1), sampleScoreReport(0.5));
@@ -136,6 +138,14 @@ describe('P4.1 审计轨迹:写接入 + 查询层', () => {
       expect(run.rubric_scores).toHaveLength(3);
       // source_trust 从 rubric_scores 抽出 = 0.4
       expect(run.source_trust).toBe(0.4);
+      // P4.2: actor_id(SYSTEM_ACTOR 默认 system)
+      expect(run.actor_id).toBe('system');
+    });
+    it('P4.2: 传 actor → trail 带 actor_id', () => {
+      const actor = { id: 'analyst1', role: 'author' as const };
+      persistScoreRun(db, sampleArtifact, makeContract(1), sampleScoreReport(0.8, 0.6), actor);
+      const trail = getArtifactAuditTrail(db, sampleArtifact);
+      expect(trail!.runs[0].actor_id).toBe('analyst1');
     });
     it('无 judge 时 judge_score=null,source_trust 仍可从 deterministic 抽出', () => {
       persistScoreRun(db, sampleArtifact, makeContract(1), sampleScoreReport(0.7, null));

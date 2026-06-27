@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { loadContract } from '../../src/contract/validate.js';
 import { buildGateRequest, processGateDecision } from '../../src/agents/human-gate.js';
+import { PermissionDeniedError } from '../../src/auth/rbac.js';
 import type { ContractPatch } from '../../src/contract/patch.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,22 @@ describe('P1 §2.6 Human Gate', () => {
     const result = processGateDecision(contract, [], 'approve');
     expect(result.decision).toBe('approve');
     expect(result.version_bumped).toBe(true);
+  });
+
+  // P4.2 RBAC: 非 approver/admin 角色不能审批契约变更
+  it('P4.2: author/viewer 角色 approve 被拒(PermissionDeniedError)', () => {
+    const author = { id: 'analyst', role: 'author' as const };
+    expect(() => processGateDecision(contract, samplePatches, 'approve', undefined, author)).toThrow(PermissionDeniedError);
+    const viewer = { id: 'auditor', role: 'viewer' as const };
+    expect(() => processGateDecision(contract, samplePatches, 'reject', 'x', viewer)).toThrow(PermissionDeniedError);
+  });
+
+  it('P4.2: approver 角色 approve 通过 + GateResult 带 approver_id', () => {
+    const approver = { id: 'compliance', role: 'approver' as const };
+    const result = processGateDecision(contract, samplePatches, 'approve', undefined, approver);
+    expect(result.decision).toBe('approve');
+    expect(result.approver_id).toBe('compliance');
+    expect(result.approver_role).toBe('approver');
   });
 
   afterEach(() => {

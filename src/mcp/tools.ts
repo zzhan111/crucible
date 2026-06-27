@@ -63,6 +63,8 @@ const runWorkflowTool: McpTool = {
       artifact_json: { type: 'string', description: 'JSON string of the starting (buggy) artifact' },
       contract_path: { type: 'string', description: 'Path to contract YAML file' },
       known_states: { type: 'array', items: { type: 'string' }, description: 'Known state tokens for Curator novelty detection' },
+      actor_id: { type: 'string', description: 'P4.2 RBAC: 操作者标识(谁触发)。未传默认 system' },
+      actor_role: { type: 'string', enum: ['admin', 'author', 'approver', 'viewer'], description: 'P4.2 RBAC: 操作者角色。未传默认 admin' },
     },
     required: ['artifact_json', 'contract_path'],
   },
@@ -70,12 +72,17 @@ const runWorkflowTool: McpTool = {
     const artifact = parseArtifact(String(args.artifact_json));
     const contract = loadContract(String(args.contract_path));
     const baseScorer = compileContract(contract);
+    const actor = {
+      id: typeof args.actor_id === 'string' ? args.actor_id : 'system',
+      role: (args.actor_role as 'admin' | 'author' | 'approver' | 'viewer') ?? 'admin',
+    };
     return await runCrucibleWorkflow({
       artifact,
       contract,
       baseScorer,
       artifactId: `mcp-${Date.now()}`,
       knownStates: Array.isArray(args.known_states) ? args.known_states as string[] : [],
+      actor,
     });
   },
 };

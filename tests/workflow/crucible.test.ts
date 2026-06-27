@@ -104,6 +104,28 @@ describe('runCrucibleWorkflow', () => {
     expect(run.det_score).toBeGreaterThanOrEqual(0);
     // 降级模式 judge=neutral 0.5,final = det*0.6 + 0.5*0.4
     expect(run.final_score).toBeGreaterThanOrEqual(0);
+    // P4.2: 未传 actor → SYSTEM_ACTOR(system)
+    expect(run.actor_id).toBe('system');
+  });
+
+  // P4.2 RBAC:传 actor → 落库 actor_id 正确
+  it('传 actor → 评分落库带 actor_id', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const baseScorer = compileContract(contract);
+    const auditDb: DB = openAndMigrate();
+    const actor = { id: 'demo-analyst', role: 'author' as const };
+    const result = await runCrucibleWorkflow({
+      artifact: hk3dayBuggy,
+      contract,
+      baseScorer,
+      artifactId: 'test-actor',
+      knownStates: ['at_hotel', 'hiking', 'luggage_drop', 'depart_from_hotel'],
+      auditDb,
+      actor,
+    });
+    const trail = getArtifactAuditTrail(auditDb, result.finalArtifact);
+    expect(trail).toBeDefined();
+    expect(trail!.runs[0].actor_id).toBe('demo-analyst');
   });
 
   it('未注入 auditDb 且无 CRUCIBLE_DB_PATH → 不落库,行为零变化', async () => {

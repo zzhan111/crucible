@@ -18,6 +18,8 @@ import { stringify as stringifyYaml } from 'yaml';
 import type { DB } from './db.js';
 import type { Contract } from '../contract/schema.js';
 import type { ScoreReport } from '../scorer/types.js';
+import type { Actor } from '../auth/rbac.js';
+import { SYSTEM_ACTOR } from '../auth/rbac.js';
 import { insertContract, insertScoreRun } from './repositories.js';
 
 type ContractWithMeta = Contract & { metadata?: { version?: unknown } };
@@ -44,16 +46,17 @@ export function resolveContractVersion(contract: Contract): number {
  *
  * - 先 insertContract(INSERT OR REPLACE,重跑安全;parent_version/diff_summary 暂留 null,
  *   契约演化的谱系由 P3 human-gate 流程另行记录,审计只关心"哪版契约评的")
- * - 再 insertScoreRun(INSERT OR REPLACE on (artifact_hash, contract_version),
- *   只留最新一次评分 — 重评分不累积历史,这是 P3.5 schema 的设计取舍,留 P4.2 改)
+ * - 再 insertScoreRun(P4.2 改 append-only,不再 REPLACE — 同工件同契约多次评分全留)
  *
+ * P4.2: actor 记"谁触发这次评分"(audit 用)。未传 → SYSTEM_ACTOR(system/admin,向后兼容)。
  * 调用方负责传入有效 db(由 openAuditDB() 决定是否落库)。
  */
 export function persistScoreRun(
   db: DB,
   artifact: unknown,
   contract: Contract,
-  report: ScoreReport
+  report: ScoreReport,
+  actor: Actor = SYSTEM_ACTOR
 ): void {
   const version = resolveContractVersion(contract);
   insertContract(db, {
@@ -63,5 +66,5 @@ export function persistScoreRun(
     parent_version: null,
     diff_summary: null,
   });
-  insertScoreRun(db, artifact, version, report);
+  insertScoreRun(db, artifact, version, report, actor.id);
 }

@@ -22,6 +22,7 @@ function makeTrail(runs = 1): ArtifactAuditTrail {
       ],
       hard_violation_count: 1,
       source_trust: 0.4,
+      actor_id: i % 2 === 0 ? 'alice' : 'bob',
     })),
   };
 }
@@ -88,12 +89,57 @@ describe('P4.1 审计轨迹导出器', () => {
         runs: [{
           contract_version: 1, family: 'sequence', scored_at: 't', det_score: 0.5, judge_score: null, final_score: 0.5,
           rubric_scores: [], violations: [{ constraint_id: 'x|y', severity: 'hard', message: 'a|b', location: {} }],
-          hard_violation_count: 1, source_trust: null,
+          hard_violation_count: 1, source_trust: null, actor_id: 'sys',
         }],
       };
       const md = exportAuditMarkdown(trail);
       // 转义后应是 \| 而非裸 |
       expect(md).toContain('x\\|y');
+    });
+  });
+
+  describe('P4.2 actor 维度 + RBAC 演进展望', () => {
+    it('每个评分小节含操作者 actor_id', () => {
+      const md = exportAuditMarkdown(makeTrail(1));
+      expect(md).toContain('操作者 (actor)');
+      expect(md).toContain('alice');
+    });
+    it('摘要列出所有操作者', () => {
+      const md = exportAuditMarkdown(makeTrail(2));
+      expect(md).toContain('**操作者**');
+      // run0=alice, run1=bob
+      expect(md).toContain('alice');
+      expect(md).toContain('bob');
+    });
+    it('含 RBAC 演进展望框(让 ToB demo 对象看到落地路径)', () => {
+      const md = exportAuditMarkdown(makeTrail());
+      expect(md).toContain('RBAC 演进展望');
+      expect(md).toContain('approve:contract');
+      expect(md).toContain('approver');
+      expect(md).toContain('viewer');
+      expect(md).toContain('P4.2.5');
+    });
+    it('含企业场景说明(保险公司 on-prem 示例)', () => {
+      const md = exportAuditMarkdown(makeTrail());
+      expect(md).toContain('保险');
+      expect(md).toContain('on-prem');
+      expect(md).toContain('契约私有');
+    });
+    it('传入活动日志 → 渲染"活动日志(actor 维度)"小节', () => {
+      const activityLog = [
+        { at: '2026-06-27 13:00:00', actor_id: 'alice', event: 'score_run' as const, artifact_hash: 'abc', contract_version: 1, det_score: 0.8, judge_score: 0.6 },
+        { at: '2026-06-27 13:05:00', actor_id: 'curator', event: 'proposal' as const, artifact_hash: 'abc', contract_version: 1, dim: 'state', gate_decision: 'pending', approver_id: null },
+      ];
+      const md = exportAuditMarkdown(makeTrail(), activityLog);
+      expect(md).toContain('活动日志(actor 维度)');
+      expect(md).toContain('alice');
+      expect(md).toContain('curator');
+      expect(md).toContain('score_run');
+      expect(md).toContain('proposal');
+    });
+    it('不传活动日志 → 不渲染活动日志小节', () => {
+      const md = exportAuditMarkdown(makeTrail());
+      expect(md).not.toContain('活动日志(actor 维度)');
     });
   });
 });
