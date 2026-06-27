@@ -1,36 +1,49 @@
 # Crucible — 契约驱动合成引擎
 
-> P0 MVP(多智能体协作赛道 demo)
+> P3.5 工程加固完成(架构决议落地 + SQLite 持久化 + 新颖度 v2 + 黄金集治理)
 > Branch: `crucible/dev` | Worktree: `D:\Apps\traveller.crucible-dev`
 
 ## 一句话立住
 
 一群智能体不靠聊天、而靠一份可执行契约协同,自动发现缺陷、自动提分。
 
-## P0 验收(全达成)
+## P3.5 验收(全达成)
 
-| # | 验收 | 状态 |
+| 阶段 | 验收 | 状态 |
 |---|---|---|
-| 4.1 | 三个真实 bug 被确定性 scorer 抓出 | ✅ |
-| 4.2 | 分数改进(非递减 + 至少一轮提升) | ✅ |
-| 4.3 | 多智能体协同可观测(日志 tag) | ✅ |
-| 4.4 | 契约版本化(Curator proposal + 文件) | ✅ |
-| 4.5 | 确定性覆盖(4 谓词 + 2 rubric) | ✅ |
+| P0 | 三个真实 bug 被确定性 scorer 抓出 | ✅ |
+| P1 | judge 校准 + Kendall τ + 黄金集 | ✅ |
+| P2 | 沙箱 + 采集层 + MCP server + UI 可视化 | ✅ |
+| P3 | 契约自演化 + A/B + 缓存层 + BigSet 生产级 + DSL 草案 | ✅ |
+| P3.5 §2.1 | Mastra v1.x 适配层 + BigSet 永久 adapter 决议 | ✅ |
+| P3.5 §2.2 | SQLite 持久化(4 表 + migration) | ✅ |
+| P3.5 §2.3 | 新颖度 v2(schema + distribution 检测器) | ✅ |
+| P3.5 §2.4 | 黄金集治理(扩容 ≥ 20 + 审计脚本) | ✅ |
+| P3.5 §2.5 | demo/mcp npm scripts + 移除未用 dep | ✅ |
 
 ## 快速开始
 
 ```bash
-# 跑全部测试(119 tests,含 20 边界 case)
+# 跑全部测试
 npm test
 
-# 跑 demo(三段式路演)
-npx tsx src/demo.ts
+# 类型检查
+npm run typecheck
 
-# 跑 demo(有 OpenRouter API key,LLM judge 真实打分)
+# 生成五段式 demo HTML(路演用)
+npm run demo:html
+
+# 启动 MCP server(JSON-RPC over stdio)
+npm run mcp:serve
+
+# 黄金集审计(分布统计 + 覆盖率矩阵)
+npm run audit:golden
+
+# 真实 LLM judge(有 API key 时)
 OPENROUTER_API_KEY=sk-... npx tsx src/demo.ts
 ```
 
-## 架构(Approach D: Mastra-native,不 fork BigSet)
+## 架构(P3.5: Mastra 适配层 + 自研编排,不 fork BigSet)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -41,16 +54,20 @@ OPENROUTER_API_KEY=sk-... npx tsx src/demo.ts
 │    ▼                                                     │
 │  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐ │
 │  │ Scorer  │──▶│ Critic  │──▶│ Apply   │──▶│ Curator │ │
-│  │ (det+   │   │ (patch  │   │ Patches │   │ (novelty│ │
-│  │  judge) │   │  gen)   │   │         │   │  detect)│ │
+│  │ (det+   │   │ (patch  │   │ Patches │   │(novelty │ │
+│  │  judge) │   │  gen)   │   │         │   │  v2)    │ │
 │  └────┬────┘   └─────────┘   └─────────┘   └────┬────┘ │
+│       │              │                            │      │
+│       │         LRU cache(P3)               novelty v2  │
 │       │                                         │       │
-│       │   ┌─────────────────────────────────────┘       │
-│       │   │ proposals → contracts/proposals/*.yaml     │
-│       ▼   ▼                                             │
-│  v2(patched)──▶ v3 ──▶ ... (max 3 rounds)              │
-│                                                          │
-│  终止:提升 < 0.01 或达 3 轮                             │
+│       ▼                                         ▼       │
+│  ┌──────────────────┐   ┌─────────────────────────┐    │
+│  │ SQLite 持久化(P3.5)│   │ Contract-Author (LLM)  │    │
+│  │ contracts/       │   │ → Human Gate → A/B      │    │
+│  │ score_runs/      │   │ → promote/retain        │    │
+│  │ ab_results/      │   └─────────────────────────┘    │
+│  │ proposals/       │                                  │
+│  └──────────────────┘                                  │
 └─────────────────────────────────────────────────────────┘
 
 final_score = deterministic_score * 0.6 + judge_overall * 0.4
@@ -64,41 +81,49 @@ final_score = deterministic_score * 0.6 + judge_overall * 0.4
 | Schema | `src/contract/schema.ts` | zod 校验,权重和=1.0 |
 | Compiler | `src/contract/compiler.ts` | Contract → 可执行 Scorer |
 | 4 谓词 | `src/predicates/` | continuity/state_mutex/time_budget/no_duplicate_state |
-| 2 确定性 rubric | `src/rubric/cost_fit.ts` + `source_trust.ts` | 无 LLM |
+| 确定性 rubric | `src/rubric/cost_fit.ts` + `source_trust.ts` | 无 LLM |
 | 3 judge rubric | `src/rubric/*.judge.ts` + `fanout.ts` | LLM 评估(routing/memorability/dining_fit) |
-| JudgeAugmentedScorer | `src/scorer/augmented.ts` | 包装确定性 + judge,final=det*0.6+judge*0.4 |
+| JudgeAugmentedScorer | `src/scorer/augmented.ts` | 包装确定性 + judge |
 | Critic | `src/agents/critic.ts` | 违规→确定性 patch |
-| Curator | `src/agents/curator.ts` | 新颖度检测→proposal |
+| Curator v2 | `src/curator/novelty_v2.ts` | 新颖度检测(schema + distribution + set-diff) |
 | Workflow | `src/workflow/crucible.ts` | 3 轮迭代回路 |
-| Fixtures | `src/fixtures/` | hk-3day-golden(无 bug)+ hk-3day-buggy(3 bug) |
+| **Mastra 适配层** | `src/agents/mastra-adapter.ts` | SimpleAgent → Mastra Agent facade(P3.5 §2.1.1) |
+| **SQLite 持久化** | `src/persistence/` | contracts/score_runs/ab_results/proposals(P3.5 §2.2) |
+| **扩容黄金集** | `src/fixtures/golden-set-expanded.ts` | ≥ 20 工件 + 覆盖率矩阵(P3.5 §2.4) |
+| Fixtures | `src/fixtures/` | hk-3day-golden + buggy + intel-table |
+
+## Mastra 适配层(P3.5 §2.1.1)
+
+P0 降级为 SimpleAgent(Mastra 0.1.x peer dep 缺失)。P3.5 调研发现 `@mastra/core` v1.47.0
+peer dep 仅 zod,`Agent` 从 `@mastra/core/agent` 导出。采用**适配层路径**:
+
+- `createMastraAgent(name, instructions)` 返回结构兼容 `SimpleAgent` 的 facade
+- 默认(`CRUCIBLE_USE_MASTRA` 未设): 等同 SimpleAgent,P3 行为零变化
+- `CRUCIBLE_USE_MASTRA=1`: facade 挂载 `getMastraAgent(model)`,获得真实 Mastra Agent
+  (orchestration/memory/streaming)
+- 决议见 `docs/decisions/mastra-p3-evaluation.md` (v2)
 
 ## 降级方案
 
 | 场景 | 降级 |
 |---|---|
 | 无 OPENROUTER_API_KEY | judge 返回 neutral 0.5,workflow 仍跑通 |
-| Mastra 不可用 | 用 SimpleAgent(纯 TS),P2 升级 |
+| Mastra 未启用 | 用 SimpleAgent(纯 TS),`CRUCIBLE_USE_MASTRA=1` 启用适配层 |
 | git commit 失败 | proposal 文件仍写 |
 | LLM 返回非数字 | parseJudgeScore 返回 0.5 |
-
-## 技术债(P1)
-
-- state_mutex 升级到相邻节点互斥(当前只查同节点)
-- compiler 支持 code_predicate.impl 动态加载(当前硬编码)
-- workflow pre-patch score 只跑确定性(省一半 LLM 调用)
-- Contract-Author 加 LLM 修订能力(当前只读)
-- Curator 自动合并提议(当前只检测+提议)
-- 冻结黄金集校准 judge
-- Mastra 升级(当前降级为 SimpleAgent)
+| better-sqlite3 不可用 | 持久化层降级到 :memory:(测试默认) |
 
 ## 设计文档
 
-- Spec: `docs/superpowers/specs/crucible-p0-spec.md`
-- Part 2 Spec: `docs/superpowers/specs/crucible-p0-spec-part2.md`
-- Part 1 Plan: `docs/superpowers/plans/2026-06-23-crucible-p0-mvp.md`(eng-reviewed)
-- Part 2 Plan: `docs/superpowers/plans/2026-06-24-crucible-p0-mvp-part2.md`(eng-reviewed)
+- Spec: `docs/superpowers/specs/crucible-p{0,1,2,3,3.5}-spec.md`
+- 决议: `docs/decisions/mastra-p3-evaluation.md` (v2) + `bigset-fork-evaluation.md`
+- 治理: `docs/governance/frozen-golden-set.md`
+- QA: `docs/qa/qa-report-crucible-p{0,1,2,3,3.5}-*.md`
+- DSL: `docs/dsl-standard/crucible-dsl-v1.md`
 - Context checkpoints: `~/.gstack/projects/traveller.crucible-dev/checkpoints/`
 
 ## License
 
-AGPL-3.0(继承 PRD v1.2 §3 决议;Approach D 不 fork BigSet 故不触发衍生义务,P4 商业化时再评估)
+AGPL-3.0(PRD v1.2 §3 决议;P3.5 §2.1.2 永久走 adapter 模式不 fork BigSet,
+引擎可独立 MIT/AGPL 二选一,ToB 靠"引擎开源 / 契约私有"分层)
+

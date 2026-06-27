@@ -1,71 +1,67 @@
-# Mastra P3 评估报告
+# Decision: Mastra 架构定调 — v2 (P3.5 §2.1.1)
 
-> Date: 2026-06-27
-> 评估人: AI agent (P3 §2.1)
-> 决议: **保持 SimpleAgent,不升级 Mastra**
+> Supersedes v1 (P3 评估)。v1 结论:Mastra 0.1.x peer dep 缺失,保留 SimpleAgent,P4 重评。
+> v2 结论:**接回 Mastra,走适配层路径。** `@mastra/core` v1.47.0 peer dep 仅 zod,prisma 问题消失。
 
----
+## 状态:ADOPTED (适配层路径)
 
-## 1. 评估背景
+## v1 → v2 变更原因
 
-P0 降级原因: `@mastra/core@0.1.26` 有缺失 peer dep `@prisma-app/client`,导致安装失败。
-P2 spec §5 将 "Mastra 升级评估" 延期到 P3 执行。
+P3 评估时 `@mastra/core` 处于 0.1.x,`@prisma-app/client` peer dep 缺失导致模块加载失败。
+P3.5 重评时 npm 上 `@mastra/core` 已到 **1.47.0**,关键变化:
 
-## 2. 调研结果
+| 项 | v1 (0.1.x) | v2 (1.47.0) |
+|----|-----------|-------------|
+| peerDependencies | 含 `@prisma-app/client`(缺失) | 仅 `zod ^3.25\|\|^4.0` |
+| `Agent` 导出 | 顶层缺失 | `@mastra/core/agent` 子路径导出 |
+| 构造所需 | — | `{name, instructions, model}` |
+| prisma 在 deps | 是 | 否 |
 
-### 2.1 版本对比
+`@mastra/agents` 包**不存在**(npm 404)。Agent 类在 `@mastra/core/agent` 子路径。
 
-| 指标 | P0 时期(0.1.26) | 当前(1.47.0) |
-|------|----------------|-------------|
-| 版本 | 0.1.26 | 1.47.0 |
-| peer deps | @prisma-app/client(缺失) | zod ^3.25.0 \|\| ^4.0.0 |
-| peer dep 修复 | ❌ | ✅ (prisma 问题已解决) |
-| Agent 导出 | `Agent` 在 core | `Agent` **不在 core** |
-| core 导出 | Agent + Mastra | 仅 `Mastra` |
+## 调研证据
 
-### 2.2 安装验证
+```
+$ npm view @mastra/core@1.47.0 peerDependencies
+{ "zod": "^3.25.0 || ^4.0.0" }
 
-- `npm install @mastra/core` 成功(无 peer dep 错误)
-- `import { Mastra } from '@mastra/core'` 成功
-- `import { Agent } from '@mastra/core'` **失败** — v1.x 把 Agent 移走
-
-### 2.3 API 破坏性变更
-
-Mastra v1.x 是重大架构变更:
-- `Agent` 不再从 `@mastra/core` 导出(可能需 `@mastra/agent` 包,但 npm 404)
-- `Mastra` 类 API 与 P0 设计的 `new Agent({name, instructions})` 完全不同
-- 升级需要重写整个 `src/agents/` 层(base/registry/scorer/judge/critic/curator/contract-author)
-
-## 3. 决议: 保持 SimpleAgent
-
-### 3.1 理由
-
-1. **API 破坏性变更**: Mastra v1.x 的 Agent API 与 P0-P3 设计不兼容,升级需重写 agent 层(7 个文件),工程量大且高风险
-2. **SimpleAgent 运行良好**: 253 tests pass, τ=0.64, 跨族 GO, MCP/UI/沙箱全部工作 — SimpleAgent 满足所有功能需求
-3. **Studio 可观测性非必需**: P0-P3 的 console.log 标签 + HTML 报告已提供足够可观测性
-4. **ROI 低**: 升级成本(重写+回归测试) > 收益(Studio UI)
-
-### 3.2 SimpleAgent 替代方案(已实现)
-
-```typescript
-// src/agents/base.ts
-export interface SimpleAgent { name: string; instructions: string; }
-export function createSimpleAgent(name, instructions): SimpleAgent { ... }
+$ node -e "import('@mastra/core/agent').then(m=>console.log(typeof m.Agent))"
+function   # _Agent 类
 ```
 
-所有 agent(scorer/judge/critic/curator/contract-author)用 SimpleAgent + 纯函数实现,
-不依赖 Mastra Agent 类。功能完整,测试覆盖。
+mock model 构造验证通过:`new Agent({name,instructions,model})` 成功,实例有 `generate`/`stream` 方法。
 
-### 3.3 未来升级路径(P4+)
+## 决议:适配层路径(非全量替换)
 
-若需 Mastra Studio 可观测性:
-1. 调研 Mastra v1.x 的 `Agent` 正确导入路径(可能需 `@mastra/agents` 或 v2.x)
-2. 写适配层: SimpleAgent → Mastra Agent wrapper(不改业务逻辑)
-3. 逐个 agent 迁移 + 回归测试
-4. 启用 Studio(需 Mastra Server)
+**不**把所有 agent 全量替换为 Mastra Agent。理由:
+- Crucible 的 agent (contract-author/judge/scorer) 当前是**纯注册容器**(`{name, instructions}`),
+  LLM 调用走 `ai` SDK (`fanoutJudges` / `callLLM`),不经 Agent 实例。
+- 全量替换会改 LLM 调用路径,破坏 P0-P3 全部测试,且 Mastra Agent 需要 `model` 才能构造,
+  与"注册期无 model"的现状冲突。
 
-## 4. 结论
+**采用适配层**:
+- 新增 `src/agents/mastra-adapter.ts`:`createMastraAgent(name, instructions)` 返回
+  `MastraBackedAgent`(结构兼容 `SimpleAgent`,额外暴露 `getMastraAgent(model)`)。
+- 默认 (`CRUCIBLE_USE_MASTRA` 未设): facade 不挂 `getMastraAgent`,等同 SimpleAgent —
+  P3 行为零变化,测试确定。
+- `CRUCIBLE_USE_MASTRA=1`: facade 挂 `getMastraAgent(model)`,调用方可获得真实 Mastra Agent
+  以备 orchestration/memory/streaming。
+- 新增 `createAgentRegistryWithMastra()` 提供三 agent 的 Mastra-backed 版本。
+- `base.ts` 注释更新为"P3.5 接回 Mastra",`SimpleAgent` 接口不变。
 
-**P3 不升级 Mastra。** 保持 SimpleAgent,记录决议。Mastra v1.x peer dep 已修复,但 API 破坏性变更使升级成本过高。SimpleAgent 满足所有功能需求,P4+ 再评估升级。
+## 落地物
 
-**STATUS: 决议已记录,保持现状。**
+- `src/agents/mastra-adapter.ts`(适配层 + memoize)
+- `src/agents/registry.ts` 新增 `createAgentRegistryWithMastra()`
+- `src/agents/base.ts` 注释更新(历史 + 现状)
+- `tests/agents/mastra-adapter.test.ts`(5 tests:flag 默认/开启、结构兼容、实例构造、memoize)
+- `@mastra/core@^1.47.0` 加入生产 deps
+
+## 不做
+
+- 不全量替换 agent LLM 调用路径(留 P4,需 Mastra Studio 可观测端点配合)。
+- 不引入 Mastra Server / Studio 运行时(适配层就位即可,P4 视 ToB 需求决定)。
+
+## 关闭的 Open Questions
+
+- OQ-Mastra(P0 起):Mastra 是否采用 → **采用,适配层形态**,关闭。

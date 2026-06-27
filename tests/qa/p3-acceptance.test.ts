@@ -26,7 +26,9 @@ describe('P3 验收标准核对 (§3.1-3.4)', () => {
       const content = readFileSync(MASTRA_DOC, 'utf8');
       expect(content).toContain('1.47.0');
       expect(content).toContain('决议');
-      expect(content).toMatch(/保持\s*SimpleAgent|升级 Mastra/);
+      // P3 v1: 保持 SimpleAgent | 升级 Mastra
+      // P4 v2: 适配层路径(ADOPTED) — 接回 Mastra,SimpleAgent 兼容 facade
+      expect(content).toMatch(/保持\s*SimpleAgent|升级 Mastra|适配层路径|ADOPTED/);
     });
   });
 

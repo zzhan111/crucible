@@ -5,17 +5,22 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:html": "CRUCIBLE_DEMO_HTML=1 tsx src/demo-html.ts",
+    "mcp:serve": "CRUCIBLE_MCP_SERVER=1 tsx src/mcp/server.ts",
+    "audit:golden": "tsx scripts/audit-golden-set.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mastra/core": "^1.47.0",
     "ai": "^6.0.0",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^16.4.0",
     "yaml": "^2.4.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.12.0",
     "@vitest/coverage-v8": "^1.6.0",
     "tsx": "^4.22.4",
