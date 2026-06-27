@@ -102,3 +102,6 @@ contracts/proposals/
 # Vitest coverage
 coverage/
 .vitest/
+
+# Portable distribution archive (build artifact, regenerable via scripts/pack-portable.sh)
+crucible-portable-*.tar.gz

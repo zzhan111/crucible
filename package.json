@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "node scripts/start.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "demo:html": "CRUCIBLE_DEMO_HTML=1 tsx src/demo-html.ts",
-    "mcp:serve": "CRUCIBLE_MCP_SERVER=1 tsx src/mcp/server.ts",
+    "demo:html": "node scripts/run-demo-html.mjs",
+    "mcp:serve": "node scripts/run-mcp.mjs",
     "audit:golden": "tsx scripts/audit-golden-set.ts"
   },
   "dependencies": {

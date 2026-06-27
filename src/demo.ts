@@ -7,8 +7,9 @@
  *
  * 运行:npx tsx src/demo.ts
  */
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
 import { loadContract } from './contract/validate.js';
 import { compileContract } from './contract/compiler.js';
 import { createJudgeAugmentedScorer } from './scorer/augmented.js';
@@ -18,6 +19,21 @@ import { hk3dayGolden } from './fixtures/hk-3day-golden.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRACT_PATH = join(__dirname, '..', 'contracts', 'travel-sequence-v1.yaml');
+
+// 加载 .env(脚本不经 vitest setup;与 demo-html.ts / demo-p1.ts 行为对齐)
+const envPath = resolve(__dirname, '..', '.env');
+if (existsSync(envPath)) {
+  const content = readFileSync(envPath, 'utf8');
+  for (const line of content.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const eq = t.indexOf('=');
+    if (eq === -1) continue;
+    const k = t.slice(0, eq).trim();
+    const v = t.slice(eq + 1).trim();
+    if (!(k in process.env)) process.env[k] = v;
+  }
+}
 
 async function main() {
   const hasApiKey = !!process.env.OPENAI_API_KEY;

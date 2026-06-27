@@ -24,6 +24,12 @@
 ## 快速开始
 
 ```bash
+# 一键启动(前置检查→依赖→.env→typecheck→test→demo:html)
+npm start
+# 等价:bash scripts/start.sh
+# 真实 LLM 模式(需 .env 填好 OPENAI_API_KEY,会调计费 API):
+#   bash scripts/start.sh --llm
+
 # 跑全部测试
 npm test
 
@@ -40,8 +46,11 @@ npm run mcp:serve
 npm run audit:golden
 
 # 真实 LLM judge(有 API key 时)
-OPENROUTER_API_KEY=sk-... npx tsx src/demo.ts
+npx tsx src/demo.ts
 ```
+
+> 手测 QA 清单(端到端逐条判 pass/fail): `docs/qa/handtest-startup.md`
+> LLM 用 `OPENAI_API_KEY` + `OPENAI_BASE_URL` + `OPENAI_MODEL`(OpenAI 兼容,DeepSeek/OpenAI/vLLM 均可)。无 key 自动降级 judge=0.5。
 
 ## 架构(P3.5: Mastra 适配层 + 自研编排,不 fork BigSet)
 
@@ -107,7 +116,7 @@ peer dep 仅 zod,`Agent` 从 `@mastra/core/agent` 导出。采用**适配层路�
 
 | 场景 | 降级 |
 |---|---|
-| 无 OPENROUTER_API_KEY | judge 返回 neutral 0.5,workflow 仍跑通 |
+| 无 OPENAI_API_KEY | judge 返回 neutral 0.5,workflow 仍跑通 |
 | Mastra 未启用 | 用 SimpleAgent(纯 TS),`CRUCIBLE_USE_MASTRA=1` 启用适配层 |
 | git commit 失败 | proposal 文件仍写 |
 | LLM 返回非数字 | parseJudgeScore 返回 0.5 |
