@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "demo:html": "node scripts/run-demo-html.mjs",
     "mcp:serve": "node scripts/run-mcp.mjs",
-    "audit:golden": "tsx scripts/audit-golden-set.ts"
+    "audit:golden": "tsx scripts/audit-golden-set.ts",
+    "audit:trail": "tsx scripts/audit-trail-export.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",

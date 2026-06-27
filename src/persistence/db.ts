@@ -72,3 +72,18 @@ export function openAndMigrate(path: string = ':memory:'): DB {
   migrate(db);
   return db;
 }
+
+/**
+ * P4.1 审计轨迹:打开生产审计 DB(从 env 读路径)。
+ *
+ * - `CRUCIBLE_DB_PATH` 未设 → 返回 null(调用方跳过落库,行为零变化)。
+ * - 设了 → 打开文件 DB 并 migrate,供审计写/查。
+ *
+ * 这样把"是否落库"做成显式 opt-in:默认不落库(P3 行为零变化),
+ * 想要审计轨迹就 `CRUCIBLE_DB_PATH=./crucible-audit.db`。
+ */
+export function openAuditDB(): DB | null {
+  const path = process.env.CRUCIBLE_DB_PATH;
+  if (!path) return null;
+  return openAndMigrate(path);
+}

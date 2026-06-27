@@ -5,6 +5,8 @@ import { loadContract } from '../../src/contract/validate.js';
 import { compileContract } from '../../src/contract/compiler.js';
 import { runCrucibleWorkflow } from '../../src/workflow/crucible.js';
 import { hk3dayBuggy } from '../../src/fixtures/hk-3day-buggy.js';
+import { openAndMigrate, type DB } from '../../src/persistence/db.js';
+import { getArtifactAuditTrail } from '../../src/persistence/audit.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRACT_PATH = join(__dirname, '..', '..', 'contracts', 'travel-sequence-v1.yaml');
@@ -76,5 +78,47 @@ describe('runCrucibleWorkflow', () => {
     const maxImprovement = improvements.length > 0 ? Math.max(...improvements) : 0;
     const finalViolations = result.iterations[result.iterations.length - 1].violations;
     expect(maxImprovement > 0.01 || finalViolations === 0).toBe(true);
+  });
+
+  // P4.1 审计轨迹:验证 workflow 落库 + 审计查询可读回(降级模式,无 LLM)
+  it('注入 auditDb → post-patch 评分落库,可经 getArtifactAuditTrail 读回', async () => {
+    const contract = loadContract(CONTRACT_PATH);
+    const baseScorer = compileContract(contract);
+    const auditDb: DB = openAndMigrate(); // :memory:
+    const result = await runCrucibleWorkflow({
+      artifact: hk3dayBuggy,
+      contract,
+      baseScorer,
+      artifactId: 'test-audit',
+      knownStates: ['at_hotel', 'hiking', 'luggage_drop', 'depart_from_hotel'],
+      auditDb,
+    });
+    // finalArtifact 是最后一轮 post-patch 产物,应有评分记录
+    const trail = getArtifactAuditTrail(auditDb, result.finalArtifact);
+    expect(trail).toBeDefined();
+    expect(trail!.runs.length).toBeGreaterThanOrEqual(1);
+    const run = trail!.runs[0];
+    // 契约版本规范化:travel-sequence-v1.yaml 无 metadata → version=1
+    expect(run.contract_version).toBe(1);
+    expect(run.family).toBe('sequence');
+    expect(run.det_score).toBeGreaterThanOrEqual(0);
+    // 降级模式 judge=neutral 0.5,final = det*0.6 + 0.5*0.4
+    expect(run.final_score).toBeGreaterThanOrEqual(0);
+  });
+
+  it('未注入 auditDb 且无 CRUCIBLE_DB_PATH → 不落库,行为零变化', async () => {
+    delete process.env.CRUCIBLE_DB_PATH;
+    const contract = loadContract(CONTRACT_PATH);
+    const baseScorer = compileContract(contract);
+    // 不传 auditDb,env 也未设 → workflow 应正常跑完,不抛错
+    const result = await runCrucibleWorkflow({
+      artifact: hk3dayBuggy,
+      contract,
+      baseScorer,
+      artifactId: 'test-no-audit',
+      knownStates: ['at_hotel', 'hiking', 'luggage_drop', 'depart_from_hotel'],
+    });
+    expect(result.iterations.length).toBeGreaterThanOrEqual(1);
+    expect(result.finalScore).toBeGreaterThanOrEqual(0);
   });
 });
