@@ -17,16 +17,19 @@
  */
 import type { Artifact } from '../predicates/types.js';
 import { GOLDEN_ARTIFACTS } from './golden-set.js';
+import { financialGolden, financialTaxFlag, financialCashflowFlag, financialRelatedPartyFlag } from './financial-dd.js';
 
 export type GoldenPurpose = 'calibration' | 'detection';
 export type QualityTier = 'high' | 'mid' | 'low';
 export type ViolationPattern =
   | 'none' | 'time_budget' | 'state_mutex' | 'duplicate_state'
-  | 'continuity' | 'missing_source' | 'pricing_format' | 'duplicate_competitor';
+  | 'continuity' | 'missing_source' | 'pricing_format' | 'duplicate_competitor'
+  // P4.3 财务尽调红旗
+  | 'tax_ratio_low' | 'cashflow_anomaly' | 'related_party_transfer';
 
 export interface ExpandedGoldenEntry {
   id: string;
-  family: 'sequence' | 'table';
+  family: 'sequence' | 'table' | 'financial';
   region: string;
   quality_tier: QualityTier;
   violation: ViolationPattern;
@@ -250,6 +253,21 @@ const expandedAdditions: ExpandedGoldenEntry[] = [
   { id: 'vio-missing-source', family: 'table', region: 'intel', quality_tier: 'low', violation: 'missing_source', purpose: 'detection', artifact: violationMissingSource },
   { id: 'vio-pricing-format', family: 'table', region: 'intel', quality_tier: 'low', violation: 'pricing_format', purpose: 'detection', artifact: violationPricingFormat },
   { id: 'vio-dup-competitor', family: 'table', region: 'intel', quality_tier: 'low', violation: 'duplicate_competitor', purpose: 'detection', artifact: violationDuplicateCompetitor },
+
+  // ─── P4.3 财务尽调 vertical(financial 族)───
+  // calibration:无硬违规,quality 差异在 source_trust(audit 质量)。fin-high=audited, fin-mid=reviewed, fin-low=unaudited。
+  // 复用 financialGolden(干净,audited)作 high;mid/low 用同结构改 audit_status + source_trust(仍无硬违规)。
+  { id: 'fin-high', family: 'financial', region: 'financial', quality_tier: 'high', violation: 'none', purpose: 'calibration', artifact: financialGolden },
+  { id: 'fin-mid', family: 'financial', region: 'financial', quality_tier: 'mid', violation: 'none', purpose: 'calibration', artifact: { ...financialGolden, metadata: { ...financialGolden.metadata, audit_status: 'reviewed' }, nodes: financialGolden.nodes.map(n => ({ ...n, source_trust: 0.7 })) } },
+  { id: 'fin-low', family: 'financial', region: 'financial', quality_tier: 'low', violation: 'none', purpose: 'calibration', artifact: { ...financialGolden, metadata: { ...financialGolden.metadata, audit_status: 'unaudited' }, nodes: financialGolden.nodes.map(n => ({ ...n, source_trust: 0.3, source: 'internal.xlsx' })) } },
+  // 每梯队第二样本(满足审计 cell ≥2;数据量级不同,仍无硬违规)
+  { id: 'fin-high2', family: 'financial', region: 'financial', quality_tier: 'high', violation: 'none', purpose: 'calibration', artifact: { ...financialGolden, metadata: { ...financialGolden.metadata, company: 'SampleCo2 Ltd' }, nodes: financialGolden.nodes.map(n => ({ ...n, amount: (n.amount as number) * 2 })) } },
+  { id: 'fin-mid2', family: 'financial', region: 'financial', quality_tier: 'mid', violation: 'none', purpose: 'calibration', artifact: { ...financialGolden, metadata: { ...financialGolden.metadata, audit_status: 'reviewed', company: 'SampleCo2 Ltd' }, nodes: financialGolden.nodes.map(n => ({ ...n, amount: (n.amount as number) * 2, source_trust: 0.7 })) } },
+  { id: 'fin-low2', family: 'financial', region: 'financial', quality_tier: 'low', violation: 'none', purpose: 'calibration', artifact: { ...financialGolden, metadata: { ...financialGolden.metadata, audit_status: 'unaudited', company: 'SampleCo2 Ltd' }, nodes: financialGolden.nodes.map(n => ({ ...n, amount: (n.amount as number) * 2, source_trust: 0.3, source: 'internal.xlsx' })) } },
+  // detection:3 个红旗档案,各触发对应 constraint_id
+  { id: 'vio-tax-ratio', family: 'financial', region: 'financial', quality_tier: 'low', violation: 'tax_ratio_low', purpose: 'detection', artifact: financialTaxFlag },
+  { id: 'vio-cashflow', family: 'financial', region: 'financial', quality_tier: 'low', violation: 'cashflow_anomaly', purpose: 'detection', artifact: financialCashflowFlag },
+  { id: 'vio-related-party', family: 'financial', region: 'financial', quality_tier: 'low', violation: 'related_party_transfer', purpose: 'detection', artifact: financialRelatedPartyFlag },
 ];
 
 /** 扩容黄金集(≥ 20 工件) */

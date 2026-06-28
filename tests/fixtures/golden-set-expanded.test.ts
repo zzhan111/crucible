@@ -68,7 +68,7 @@ describe('P3.5 §2.4 扩容黄金集', () => {
 
   it('每个工件 family 合法', () => {
     for (const e of EXPANDED_GOLDEN) {
-      expect(['sequence', 'table']).toContain(e.family);
+      expect(['sequence', 'table', 'financial']).toContain(e.family);
     }
   });
 
@@ -80,12 +80,13 @@ describe('P3.5 §2.4 扩容黄金集', () => {
 });
 
 describe('P4.5 黄金集 table 族梯度补全', () => {
-  it('EXPANDED_GOLDEN 含新增 3 个 table calibration 工件(总数 23)', () => {
+  it('EXPANDED_GOLDEN 含新增 3 个 table calibration 工件(总数随 P4.3 financial 增长)', () => {
     const ids = EXPANDED_GOLDEN.map(e => e.id);
     expect(ids).toContain('intel-high2');
     expect(ids).toContain('intel-mid2');
     expect(ids).toContain('intel-low2');
-    expect(EXPANDED_GOLDEN.length).toBe(23);
+    // P4.5 后 23;P4.3 加 9 financial(6 calib + 3 det)= 32
+    expect(EXPANDED_GOLDEN.length).toBe(32);
   });
 
   it('table calibration 每个 tier ≥ 2(审计 cell 不再告警)', () => {
@@ -123,7 +124,47 @@ describe('P4.5 黄金集 table 族梯度补全', () => {
     expect(new Set(newEntries).size).toBe(newEntries.length);
   });
 
-  it('CALIBRATION_GOLDEN 数量同步增长(13 → 16)', () => {
-    expect(CALIBRATION_GOLDEN.length).toBe(16);
+  it('CALIBRATION_GOLDEN 数量同步增长(P4.5 + P4.3 financial)', () => {
+    // P4.5: 13→16(table +3); P4.3: 16→22(financial +6 calibration)
+    expect(CALIBRATION_GOLDEN.length).toBe(22);
+  });
+});
+
+describe('P4.3 财务尽调 vertical 黄金集条目', () => {
+  it('EXPANDED_GOLDEN 含 financial 族条目', () => {
+    const fin = EXPANDED_GOLDEN.filter(e => e.family === 'financial');
+    expect(fin.length).toBeGreaterThanOrEqual(6); // 6 calibration + 3 detection = 9, 至少 6
+    const ids = fin.map(e => e.id);
+    expect(ids).toContain('fin-high');
+    expect(ids).toContain('vio-tax-ratio');
+  });
+
+  it('financial calibration 每个 tier ≥ 2(审计 cell 不告警)', () => {
+    const finCalib = EXPANDED_GOLDEN.filter(e => e.family === 'financial' && e.purpose === 'calibration');
+    for (const tier of ['high', 'mid', 'low'] as const) {
+      const count = finCalib.filter(e => e.quality_tier === tier).length;
+      expect(count, `financial/${tier} 应 ≥ 2`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('financial detection 条目覆盖 3 个红旗 pattern', () => {
+    const finDet = EXPANDED_GOLDEN.filter(e => e.family === 'financial' && e.purpose === 'detection');
+    const patterns = finDet.map(e => e.violation);
+    expect(patterns).toContain('tax_ratio_low');
+    expect(patterns).toContain('cashflow_anomaly');
+    expect(patterns).toContain('related_party_transfer');
+  });
+
+  it('financial calibration 工件无硬违规(governance §3.1)', () => {
+    const scorer = compileContract(loadContract(TABLE_CONTRACT));
+    // financial 用 financial-v1 契约,不是 intel-table;此测试验 financial calibration 工件
+    // 用 financial-v1 重打分验无硬违规
+    const finContract = loadContract(join(__dirname, '..', '..', 'contracts', 'financial-v1.yaml'));
+    const finScorer = compileContract(finContract);
+    const finCalib = EXPANDED_GOLDEN.filter(e => e.family === 'financial' && e.purpose === 'calibration');
+    for (const e of finCalib) {
+      const r = finScorer.score(e.artifact);
+      expect(r.deterministic.hard_violation_count, `${e.id} 不应有硬违规`).toBe(0);
+    }
   });
 });

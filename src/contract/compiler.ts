@@ -14,6 +14,7 @@ import { costFit } from '../rubric/cost_fit.js';
 import { sourceTrust } from '../rubric/source_trust.js';
 import { coverage } from '../rubric/coverage.js';
 import { freshness } from '../rubric/freshness.js';
+import { ratioHealth } from '../rubric/ratio_health.js'; // P4.3 财务尽调
 
 const HARD_VIOLATION_PENALTY = 0.15;
 
@@ -70,6 +71,8 @@ export function compileContract(contract: Contract): CompiledScorer {
       // P1 §2.8 跨族探针:情报表族 rubric
       case 'coverage': rubrics.push(coverage); break;
       case 'freshness': rubrics.push(freshness); break;
+      // P4.3 财务尽调:综合比率健康度
+      case 'ratio_health': rubrics.push(ratioHealth); break;
       default: break;
     }
   }

@@ -68,11 +68,12 @@ function main(): void {
 
   // ── 3. 覆盖率矩阵 ──
   section('3. 覆盖率矩阵');
-  const families = ['sequence', 'table'] as const;
+  const families = ['sequence', 'table', 'financial'] as const;
   const tiers: QualityTier[] = ['high', 'mid', 'low'];
   const violations: ViolationPattern[] = [
     'none', 'time_budget', 'state_mutex', 'duplicate_state',
     'continuity', 'missing_source', 'pricing_format', 'duplicate_competitor',
+    'tax_ratio_low', 'cashflow_anomaly', 'related_party_transfer',
   ];
 
   console.log('\n  family × quality_tier(calibration):');

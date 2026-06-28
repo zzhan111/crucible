@@ -1,0 +1,154 @@
+# P4.3 财务尽调 vertical 契约 — 红旗筛查(非偷漏税定性)
+#
+# ⚠️ 合规边界:本契约标记的是"按尽调 rubric 触发的红旗",不是"证明偷税漏税"。
+#   "是否真逃税"是审计师/律师的判断。Crucible 的价值是系统化、一致、可向监管辩护的红旗筛查。
+#   source_trust 维度区分审计质量(audited > unaudited);审计轨迹支撑"可向监管交代"。
+#
+# artifact:financial family。nodes = 财报 line_item 行(income_statement/balance_sheet/cash_flow)。
+# metadata:fiscal_year / currency / audit_status / company。
+#
+# spec ref: PRD v1.2 §6 审计轨迹;P4.3 plan §2
+
+artifact_family: financial
+
+fields:
+  - { name: line_item, type: string, required: true }
+  - { name: amount, type: number, required: true }
+  - { name: section, type: enum, required: true, values: [income_statement, balance_sheet, cash_flow] }
+  - { name: source, type: string, required: false }
+  - { name: source_trust, type: number, required: false }
+  - { name: period, type: string, required: false }
+  - { name: related_party, type: string, required: false }
+  - { name: disclosed, type: string, required: false }
+
+hard_constraints:
+  # 红旗 1:有效税率异常低(tax_expense / pre_tax_profit < 0.10)
+  # 行业下限参考:一般企业有效税率 ≥ 10%。显著低于 → 偷漏税红旗(需核查税前调整/递延税)
+  - id: tax_ratio_floor
+    type: code_predicate
+    impl: |
+      function check(artifact) {
+        var violations = [];
+        var items = {};
+        artifact.nodes.forEach(function(n) {
+          if (typeof n.line_item === 'string' && typeof n.amount === 'number') {
+            items[n.line_item] = n.amount;
+          }
+        });
+        var tax = items['tax_expense'];
+        var profit = items['pre_tax_profit'];
+        if (typeof tax === 'number' && typeof profit === 'number' && profit > 0) {
+          var ratio = tax / profit;
+          if (ratio < 0.10) {
+            violations.push({
+              constraint_id: 'tax_ratio_floor',
+              severity: 'hard',
+              message: '有效税率 ' + (ratio * 100).toFixed(1) + '% 低于 10% 行业下限(偷漏税红旗)',
+              location: { field: 'tax_expense' },
+              fix_hint: '核查税前调整项/递延税资产/税收优惠资质是否合规'
+            });
+          }
+        }
+        return violations;
+      }
+    threshold: 0.10
+
+  # 红旗 2:经营现金流远低于净利润(operating_cashflow / net_income < 0.5)
+  # 现金流与利润背离 → 盈利质量红旗(可能虚增收入/延迟确认费用)
+  - id: cashflow_anomaly
+    type: code_predicate
+    impl: |
+      function check(artifact) {
+        var violations = [];
+        var items = {};
+        artifact.nodes.forEach(function(n) {
+          if (typeof n.line_item === 'string' && typeof n.amount === 'number') {
+            items[n.line_item] = n.amount;
+          }
+        });
+        var ocf = items['operating_cashflow'];
+        var ni = items['net_income'];
+        if (typeof ocf === 'number' && typeof ni === 'number' && ni > 0) {
+          var ratio = ocf / ni;
+          if (ratio < 0.5) {
+            violations.push({
+              constraint_id: 'cashflow_anomaly',
+              severity: 'hard',
+              message: '经营现金流/净利润 = ' + ratio.toFixed(2) + '(低于 0.5,盈利质量红旗)',
+              location: { field: 'operating_cashflow' },
+              fix_hint: '核查应收账款周转/收入确认政策/非经常性损益'
+            });
+          }
+        }
+        return violations;
+      }
+    threshold: 0.5
+
+  # 红旗 3:关联方交易占收入比 > 30% 且无披露(转移定价红旗)
+  - id: related_party_transfer
+    type: code_predicate
+    impl: |
+      function check(artifact) {
+        var violations = [];
+        var related = 0, totalRevenue = 0, hasUndisclosed = false;
+        artifact.nodes.forEach(function(n) {
+          if (n.line_item === 'revenue' && typeof n.amount === 'number') {
+            totalRevenue += n.amount;
+            if (typeof n.related_party === 'string' && n.related_party) {
+              related += n.amount;
+              if (n.disclosed !== 'yes') hasUndisclosed = true;
+            }
+          }
+        });
+        if (totalRevenue > 0 && related / totalRevenue > 0.30 && hasUndisclosed) {
+          violations.push({
+            constraint_id: 'related_party_transfer',
+            severity: 'hard',
+            message: '关联方收入占收入比 ' + ((related / totalRevenue) * 100).toFixed(0) + '% 超过 30% 且未披露(转移定价红旗)',
+            location: { field: 'related_party' },
+            fix_hint: '补充关联交易披露;核查转移定价是否符合独立交易原则'
+          });
+        }
+        return violations;
+      }
+    threshold: 0.30
+
+  # 红旗 4:资产负债率 > 0.85(资不抵债风险)
+  - id: ratio_breach
+    type: code_predicate
+    impl: |
+      function check(artifact) {
+        var violations = [];
+        var items = {};
+        artifact.nodes.forEach(function(n) {
+          if (typeof n.line_item === 'string' && typeof n.amount === 'number') {
+            items[n.line_item] = n.amount;
+          }
+        });
+        var tl = items['total_liabilities'];
+        var ta = items['total_assets'];
+        if (typeof tl === 'number' && typeof ta === 'number' && ta > 0) {
+          var dr = tl / ta;
+          if (dr > 0.85) {
+            violations.push({
+              constraint_id: 'ratio_breach',
+              severity: 'hard',
+              message: '资产负债率 ' + (dr * 100).toFixed(0) + '% 超过 85%(资不抵债风险)',
+              location: { field: 'total_liabilities' },
+              fix_hint: '评估偿债能力;核查债务重组/持续经营假设'
+            });
+          }
+        }
+        return violations;
+      }
+    threshold: 0.85
+
+rubric:
+  - { dim: source_trust, weight: 0.35, mode: deterministic }
+  - { dim: ratio_health, weight: 0.35, mode: deterministic }
+  - { dim: coverage, weight: 0.15, mode: deterministic }
+  - { dim: tax_compliance, weight: 0.15, mode: judge }
+
+calibration:
+  frozen_golden_set: golden/financial-calibration.jsonl
+  metric: kendall_tau

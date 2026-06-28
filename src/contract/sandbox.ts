@@ -1,4 +1,6 @@
 import type { Artifact, Violation } from '../predicates/types.js';
+import * as vm from 'node:vm';
+import { createRequire } from 'node:module';
 
 /**
  * code_predicate 沙箱(P2 §2.1)。
@@ -12,17 +14,21 @@ import type { Artifact, Violation } from '../predicates/types.js';
  * - 无 require/import/fs/network(isolate 默认无全局 API)
  *
  * 降级: 若 isolated-vm 不可用,降级到 Node 内置 vm 模块(隔离性弱,但有超时)。
+ *
+ * 注:本项目是 ESM("type":"module"),不能用 require。isolated-vm 是可选 CJS 依赖,
+ * 用 createRequire 动态加载(不可用时降级 vm);node:vm 用 ESM import。
  */
 
 const MEMORY_LIMIT = 128; // MB
 const TIMEOUT_MS = 1000; // 执行超时
+const esmRequire = createRequire(import.meta.url);
 
 export type SandboxBackend = 'isolated-vm' | 'vm' | 'none';
 
 /** 检测可用后端 */
 export function detectSandboxBackend(): SandboxBackend {
   try {
-    require('isolated-vm');
+    esmRequire('isolated-vm');
     return 'isolated-vm';
   } catch {
     // 降级到 Node vm
@@ -52,9 +58,8 @@ export function runInSandbox(impl: string, artifact: Artifact): Violation[] {
  * isolated-vm 后端: 最强隔离(独立 V8 isolate,无全局 API)。
  */
 function runInIsolatedVm(impl: string, artifact: Artifact): Violation[] {
-  // 动态 require,避免 isolated-vm 不可用时 import 失败
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const ivm = require('isolated-vm');
+  // 用 createRequire 动态加载 CJS 的 isolated-vm(ESM 不能直接 require)
+  const ivm = esmRequire('isolated-vm');
   const isolate = new ivm.Isolate({ memoryLimit: MEMORY_LIMIT });
   const context = isolate.createContextSync();
   const jail = context.global;
@@ -90,7 +95,6 @@ function runInIsolatedVm(impl: string, artifact: Artifact): Violation[] {
  * 仅在 isolated-vm 不可用时使用。
  */
 function runInNodeVm(impl: string, artifact: Artifact): Violation[] {
-  const vm = require('node:vm');
   const artifactJson = JSON.stringify(artifact);
   const wrappedCode = `
     (function() {

@@ -39,7 +39,7 @@ const Calibration = z.object({
 });
 
 export const ContractSchema = z.object({
-  artifact_family: z.enum(['sequence', 'table', 'brief', 'roster']),
+  artifact_family: z.enum(['sequence', 'table', 'brief', 'roster', 'financial']),
   fields: z.array(FieldDef),
   hard_constraints: z.array(HardConstraint),
   rubric: z.array(RubricEntry)

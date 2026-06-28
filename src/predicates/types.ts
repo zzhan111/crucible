@@ -5,12 +5,17 @@ export interface ArtifactNode {
 
 /** 完整工件 = 节点序列 */
 export interface Artifact {
-  family: 'sequence' | 'table' | 'brief' | 'roster';
+  family: 'sequence' | 'table' | 'brief' | 'roster' | 'financial';
   nodes: ArtifactNode[];
   metadata?: {
     day?: number;
     daily_available_minutes?: number;
     budget?: { min: number; max: number };
+    // P4.3 财务尽调 vertical 元数据
+    fiscal_year?: number;
+    currency?: string;
+    audit_status?: 'audited' | 'reviewed' | 'unaudited';
+    company?: string;
   };
 }
 
