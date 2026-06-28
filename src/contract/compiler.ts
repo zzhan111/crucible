@@ -9,12 +9,16 @@ import { noDuplicateState } from '../predicates/no_duplicate_state.js';
 import { noEmptySource } from '../predicates/no_empty_source.js';
 import { pricingFormat } from '../predicates/pricing_format.js';
 import { noDuplicateCompetitor } from '../predicates/no_duplicate_competitor.js';
+import { makeStalePricing } from '../predicates/stale_pricing.js'; // P4.6 intel 深化
+import { sourceTrustFloor } from '../predicates/source_trust_floor.js';
+import { unitConsistency } from '../predicates/unit_consistency.js';
 import { makeSandboxedPredicate } from './sandbox.js';
 import { costFit } from '../rubric/cost_fit.js';
 import { sourceTrust } from '../rubric/source_trust.js';
 import { coverage } from '../rubric/coverage.js';
 import { freshness } from '../rubric/freshness.js';
 import { ratioHealth } from '../rubric/ratio_health.js'; // P4.3 财务尽调
+import { differentiatorDensity } from '../rubric/differentiator_density.js'; // P4.6 intel 深化
 
 const HARD_VIOLATION_PENALTY = 0.15;
 
@@ -56,6 +60,10 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'no_empty_source': predicates.push(noEmptySource); break;
       case 'pricing_format': predicates.push(pricingFormat); break;
       case 'no_duplicate_competitor': predicates.push(noDuplicateCompetitor); break;
+      // P4.6 §1 intel 深化:陈旧定价 / 来源地板 / 单位一致性
+      case 'stale_pricing': predicates.push(makeStalePricing()); break;
+      case 'source_trust_floor': predicates.push(sourceTrustFloor); break;
+      case 'unit_consistency': predicates.push(unitConsistency); break;
       default:
         // 未知 declarative 约束跳过
         break;
@@ -73,6 +81,8 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'freshness': rubrics.push(freshness); break;
       // P4.3 财务尽调:综合比率健康度
       case 'ratio_health': rubrics.push(ratioHealth); break;
+      // P4.6 §2 intel 深化:差异点密度
+      case 'differentiator_density': rubrics.push(differentiatorDensity); break;
       default: break;
     }
   }

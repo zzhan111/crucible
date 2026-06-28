@@ -1,9 +1,15 @@
-# 情报表族 Contract v1 (P1 §2.8 跨族探针)
-# 测试同一套 DSL(字段+约束+rubric 结构)能否跨族使用。
+# 情报表族 Contract v1.1 (P4.6 §3 深化)
+#
+# 升级自 v1(P1 §2.8 跨族探针):
+#   - 新增 3 个 hard 约束:stale_pricing / source_trust_floor / unit_consistency
+#   - rubric 从 3 维扩到 5 维:+ differentiator_density(确定性) + strategic_insight(LLM judge)
+#   - 权重重新分配,覆盖"出处可信度 + 新鲜度 + 差异点 + 战略洞察"
+#
 # 工件 = 竞品情报表,每行是一个 competitor 数据条目(节点 = 行)。
+# 适用场景:市场情报 / 竞品监测 / 采购选型(出处 + 分数 = 审计轨迹)。
 metadata:
-  version: 1
-  family_note: "cross-family probe: intel table"
+  version: 1.1
+  family_note: "P4.6 深化: market intel / competitor monitoring"
 
 artifact_family: table
 
@@ -28,6 +34,7 @@ fields:
     required: true
 
 hard_constraints:
+  # ── v1 保留 ──
   - id: no_empty_source
     type: declarative
     rule: "每行必须有非空 source 字段"
@@ -38,18 +45,36 @@ hard_constraints:
     type: declarative
     rule: "competitor_name 不能重复(同一竞品不重复列)"
 
+  # ── v1.1 新增(P4.6 §1)──
+  - id: stale_pricing
+    type: declarative
+    rule: "last_verified 超 180 天 → hard 违规(定价可能失效,需重新核验)"
+  - id: source_trust_floor
+    type: declarative
+    rule: "source_trust < 0.2 硬地板 / < 0.4 软地板(来源可信度门槛)"
+  - id: unit_consistency
+    type: declarative
+    rule: "pricing 单位可归一化(¥/月、$XX/mo、/年、免费、按量),否则 soft 违规"
+
 rubric:
+  # 权重和 = 1.0(coverage 0.25 + freshness 0.20 + source_trust 0.20 + differentiator_density 0.15 + strategic_insight 0.20)
   - dim: coverage
-    weight: 0.4
+    weight: 0.25
     mode: deterministic
   - dim: freshness
-    weight: 0.3
+    weight: 0.20
     mode: deterministic
   - dim: source_trust
-    weight: 0.3
+    weight: 0.20
     mode: deterministic
+  - dim: differentiator_density
+    weight: 0.15
+    mode: deterministic
+  - dim: strategic_insight
+    weight: 0.20
+    mode: judge
 
 calibration:
-  frozen_golden_set: "(P1 探针不建黄金集,留 P2)"
+  frozen_golden_set: "P4.6 §5 扩容:intel-high/mid/low + intel-pub-saas/oss/oss-low(6 calibration)+ vio-stale-pricing/vio-trust-floor(2 detection)"
   metric: kendall_tau
-  human_ceiling: "n/a (cross-family probe)"
+  human_ceiling: "n/a (cross-family probe, judge mock fallback)"

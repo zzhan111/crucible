@@ -40,7 +40,7 @@ describe('P3.5 §2.4 扩容黄金集', () => {
   });
 
   it('每个 violation pattern 至少 1 个 detection 样本', () => {
-    const patterns = ['time_budget', 'state_mutex', 'duplicate_state', 'continuity', 'missing_source', 'pricing_format', 'duplicate_competitor'];
+    const patterns = ['time_budget', 'state_mutex', 'duplicate_state', 'continuity', 'missing_source', 'pricing_format', 'duplicate_competitor', 'stale_pricing', 'trust_floor'];
     for (const p of patterns) {
       expect(EXPANDED_GOLDEN.filter(e => e.violation === p).length).toBeGreaterThanOrEqual(1);
     }
@@ -85,8 +85,8 @@ describe('P4.5 黄金集 table 族梯度补全', () => {
     expect(ids).toContain('intel-high2');
     expect(ids).toContain('intel-mid2');
     expect(ids).toContain('intel-low2');
-    // P4.5 后 23;P4.3 加 9 financial(6 calib + 3 det)= 32
-    expect(EXPANDED_GOLDEN.length).toBe(32);
+    // P4.5 后 23;P4.3 加 9 financial(6 calib + 3 det)= 32;P4.6 加 5 intel(3 calib + 2 det)= 37
+    expect(EXPANDED_GOLDEN.length).toBe(37);
   });
 
   it('table calibration 每个 tier ≥ 2(审计 cell 不再告警)', () => {
@@ -124,9 +124,65 @@ describe('P4.5 黄金集 table 族梯度补全', () => {
     expect(new Set(newEntries).size).toBe(newEntries.length);
   });
 
-  it('CALIBRATION_GOLDEN 数量同步增长(P4.5 + P4.3 financial)', () => {
-    // P4.5: 13→16(table +3); P4.3: 16→22(financial +6 calibration)
-    expect(CALIBRATION_GOLDEN.length).toBe(22);
+  it('CALIBRATION_GOLDEN 数量同步增长(P4.5 + P4.3 financial + P4.6 intel)', () => {
+    // P4.5: 13→16(table +3); P4.3: 16→22(financial +6 calibration); P4.6: 22→25(intel +3 calibration)
+    expect(CALIBRATION_GOLDEN.length).toBe(25);
+  });
+});
+
+describe('P4.6 intel 深化:公开快照 + 新 detection 探针', () => {
+  it('EXPANDED_GOLDEN 含 3 个公开快照 calibration + 2 个新 detection', () => {
+    const ids = EXPANDED_GOLDEN.map(e => e.id);
+    expect(ids).toContain('intel-pub-saas');
+    expect(ids).toContain('intel-pub-oss');
+    expect(ids).toContain('intel-pub-oss-low');
+    expect(ids).toContain('vio-stale-pricing');
+    expect(ids).toContain('vio-trust-floor');
+  });
+
+  it('3 个公开快照 calibration 无硬违规(v1.1 契约:含 stale_pricing / source_trust_floor)', () => {
+    const contract = loadContract(TABLE_CONTRACT);
+    const scorer = compileContract(contract);
+    for (const id of ['intel-pub-saas', 'intel-pub-oss', 'intel-pub-oss-low']) {
+      const entry = EXPANDED_GOLDEN.find(e => e.id === id)!;
+      const report = scorer.score(entry.artifact);
+      expect(report.deterministic.hard_violation_count, `${id} 不应有硬违规`).toBe(0);
+    }
+  });
+
+  it('vio-stale-pricing 触发 stale_pricing hard 违规(全部超 180 天)', () => {
+    const contract = loadContract(TABLE_CONTRACT);
+    const scorer = compileContract(contract);
+    const entry = EXPANDED_GOLDEN.find(e => e.id === 'vio-stale-pricing')!;
+    const report = scorer.score(entry.artifact);
+    const v = report.deterministic.violations.find(x => x.constraint_id === 'stale_pricing');
+    expect(v).toBeDefined();
+    expect(v!.severity).toBe('hard');
+    expect(report.deterministic.hard_violation_count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('vio-trust-floor 触发 source_trust_floor hard 违规(全部 < 0.2)', () => {
+    const contract = loadContract(TABLE_CONTRACT);
+    const scorer = compileContract(contract);
+    const entry = EXPANDED_GOLDEN.find(e => e.id === 'vio-trust-floor')!;
+    const report = scorer.score(entry.artifact);
+    const v = report.deterministic.violations.find(x => x.constraint_id === 'source_trust_floor');
+    expect(v).toBeDefined();
+    expect(v!.severity).toBe('hard');
+    expect(report.deterministic.hard_violation_count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('公开快照竞品名与既有 intel 不重复(避免 duplicate_competitor)', () => {
+    const pubNames = ['intel-pub-saas', 'intel-pub-oss', 'intel-pub-oss-low']
+      .map(id => EXPANDED_GOLDEN.find(e => e.id === id)!)
+      .flatMap(e => e.artifact.nodes.map(n => (n as { competitor_name: string }).competitor_name));
+    const oldNames = ['intel-high', 'intel-mid', 'intel-low', 'intel-high2', 'intel-mid2', 'intel-low2']
+      .map(id => EXPANDED_GOLDEN.find(e => e.id === id)!)
+      .flatMap(e => e.artifact.nodes.map(n => (n as { competitor_name: string }).competitor_name));
+    for (const name of pubNames) {
+      expect(oldNames).not.toContain(name);
+    }
+    expect(new Set(pubNames).size).toBe(pubNames.length);
   });
 });
 

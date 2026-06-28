@@ -20,23 +20,30 @@ describe('P1 §2.8 跨族探针 — 情报表族', () => {
   const contract = loadContract(INTEL_CONTRACT_PATH);
   const scorer = compileContract(contract);
 
-  it('intel-table-v1.yaml 加载成功(同 DSL schema)', () => {
+  it('intel-table-v1.yaml 加载成功(同 DSL schema;v1.1 深化后约束/rubric 扩容)', () => {
     expect(contract.artifact_family).toBe('table');
     expect(contract.fields.length).toBeGreaterThan(0);
-    expect(contract.hard_constraints.length).toBe(3);
-    expect(contract.rubric.length).toBe(3);
+    // v1: 3 hard_constraints;v1.1 (P4.6): +3(stale_pricing/source_trust_floor/unit_consistency)= 6
+    expect(contract.hard_constraints.length).toBe(6);
+    // v1: 3 rubric(全 deterministic);v1.1: 5(4 deterministic + 1 judge strategic_insight)
+    expect(contract.rubric.length).toBe(5);
   });
 
-  it('编译成功:3 个谓词 + 3 个 deterministic rubric', () => {
-    expect(scorer.deterministicPredicateCount).toBe(3);
-    expect(scorer.deterministicRubricCount).toBe(3);
+  it('编译成功:6 个谓词 + 4 个 deterministic rubric(v1.1;+1 judge strategic_insight 不计入 deterministic)', () => {
+    expect(scorer.deterministicPredicateCount).toBe(6);
+    expect(scorer.deterministicRubricCount).toBe(4);
   });
 
-  it('buggy 情报表:3 个硬违规被抓出(缺 source / pricing 未知 / 重复竞品)', () => {
+  it('buggy 情报表:3 个硬违规被抓出(缺 source / pricing 未知 / 重复竞品;v1.1 source_trust_floor 对 0.3 触发 soft)', () => {
     const report = scorer.score(intelTableBuggy);
     expect(report.deterministic.hard_violation_count).toBe(3);
-    const ids = report.deterministic.violations.map(v => v.constraint_id).sort();
-    expect(ids).toEqual(['no_duplicate_competitor', 'no_empty_source', 'pricing_format']);
+    const hardIds = report.deterministic.violations
+      .filter(v => v.severity === 'hard')
+      .map(v => v.constraint_id).sort();
+    expect(hardIds).toEqual(['no_duplicate_competitor', 'no_empty_source', 'pricing_format']);
+    // v1.1 source_trust_floor 对 source_trust=0.3 触发 soft(不阻断,需复核)
+    const soft = report.deterministic.violations.filter(v => v.severity === 'soft');
+    expect(soft.some(v => v.constraint_id === 'source_trust_floor')).toBe(true);
   });
 
   it('buggy 情报表:每个违规有 fix_hint', () => {
@@ -59,12 +66,15 @@ describe('P1 §2.8 跨族探针 — 情报表族', () => {
       .toBeGreaterThan(buggyReport.deterministic.deterministic_score);
   });
 
-  it('deterministic rubric 包含 coverage + freshness + source_trust', () => {
+  it('deterministic rubric 包含 coverage + freshness + source_trust + differentiator_density(v1.1)', () => {
     const report = scorer.score(intelTableGolden);
     const dims = report.deterministic.rubric_scores.map(r => r.dim);
     expect(dims).toContain('coverage');
     expect(dims).toContain('freshness');
     expect(dims).toContain('source_trust');
+    expect(dims).toContain('differentiator_density');
+    // strategic_insight 是 judge,不进 deterministic.rubric_scores
+    expect(dims).not.toContain('strategic_insight');
   });
 
   it('coverage rubric:golden 表全覆盖(1.0)', () => {
@@ -80,10 +90,11 @@ describe('P1 §2.8 跨族探针 — 情报表族', () => {
     expect(Array.isArray(proposals)).toBe(true);
   });
 
-  it('OQ-13 go/no-go 判定:go(同 DSL 跨族可用)', () => {
+  it('OQ-13 go/no-go 判定:go(同 DSL 跨族可用;v1.1 深化后仍 go)', () => {
     // 判定逻辑:Contract 加载 + 编译 + Scorer 跑通 + bug 被抓 = go
+    // v1.1 升级后谓词/rubric 扩容,但 go 判定标准不变(能加载+编译+抓 bug+golden 干净)
     const loadsOk = contract.artifact_family === 'table';
-    const compilesOk = scorer.deterministicPredicateCount === 3 && scorer.deterministicRubricCount === 3;
+    const compilesOk = scorer.deterministicPredicateCount >= 3 && scorer.deterministicRubricCount >= 3;
     const bugsCaught = scorer.score(intelTableBuggy).deterministic.hard_violation_count === 3;
     const goldenClean = scorer.score(intelTableGolden).deterministic.hard_violation_count === 0;
 

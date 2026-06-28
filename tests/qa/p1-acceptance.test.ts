@@ -134,7 +134,8 @@ describe('P1 验收标准核对 (§3.1-3.6)', () => {
       const intelContract = loadContract(INTEL_CONTRACT_PATH);
       const intelScorer = compileContract(intelContract);
       expect(intelContract.artifact_family).toBe('table');
-      expect(intelScorer.deterministicPredicateCount).toBe(3);
+      // v1: 3 predicates;v1.1 (P4.6 深化): 6 predicates(+stale_pricing/source_trust_floor/unit_consistency)
+      expect(intelScorer.deterministicPredicateCount).toBe(6);
       // go 判定:能跑 + 能抓 bug = go
       expect('go').toBe('go');
     });

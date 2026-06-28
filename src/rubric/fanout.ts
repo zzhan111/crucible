@@ -5,6 +5,7 @@ import type { JudgeContext } from './judge-types.js';
 import { routingJudge, routingProxy } from './routing.judge.js';
 import { memorabilityJudge } from './memorability.judge.js';
 import { diningFitJudge } from './dining_fit.judge.js';
+import { strategicInsightJudge } from './strategic_insight.judge.js'; // P4.6 intel 深化
 
 /**
  * fanoutJudges: 共享的 judge fan-out 逻辑(eng-review A3 DRY 修复)。
@@ -30,6 +31,7 @@ export async function fanoutJudges(
     if (r.dim === 'routing') promises.push(routingJudge(ctx));
     else if (r.dim === 'memorability') promises.push(memorabilityJudge(ctx));
     else if (r.dim === 'dining_fit') promises.push(diningFitJudge(ctx));
+    else if (r.dim === 'strategic_insight') promises.push(strategicInsightJudge(ctx)); // P4.6 intel 深化
   }
   return Promise.all(promises);
 }

@@ -11,7 +11,8 @@
     "mcp:serve": "node scripts/run-mcp.mjs",
     "audit:golden": "tsx scripts/audit-golden-set.ts",
     "audit:trail": "tsx scripts/audit-trail-export.ts",
-    "dd:financial": "tsx scripts/run-financial-dd.ts"
+    "dd:financial": "tsx scripts/run-financial-dd.ts",
+    "intel:monitor": "tsx scripts/run-intel-monitor.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",

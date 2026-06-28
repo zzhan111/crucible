@@ -18,6 +18,7 @@
 import type { Artifact } from '../predicates/types.js';
 import { GOLDEN_ARTIFACTS } from './golden-set.js';
 import { financialGolden, financialTaxFlag, financialCashflowFlag, financialRelatedPartyFlag } from './financial-dd.js';
+import { publicCompetitorSampleSaaS, publicCompetitorSampleOSS } from './public-competitor-sample.js'; // P4.6 §4
 
 export type GoldenPurpose = 'calibration' | 'detection';
 export type QualityTier = 'high' | 'mid' | 'low';
@@ -25,7 +26,9 @@ export type ViolationPattern =
   | 'none' | 'time_budget' | 'state_mutex' | 'duplicate_state'
   | 'continuity' | 'missing_source' | 'pricing_format' | 'duplicate_competitor'
   // P4.3 财务尽调红旗
-  | 'tax_ratio_low' | 'cashflow_anomaly' | 'related_party_transfer';
+  | 'tax_ratio_low' | 'cashflow_anomaly' | 'related_party_transfer'
+  // P4.6 intel 深化:陈旧定价 / 来源地板
+  | 'stale_pricing' | 'trust_floor';
 
 export interface ExpandedGoldenEntry {
   id: string;
@@ -152,6 +155,48 @@ const intelLow2: Artifact = {
   ],
 };
 
+// ─── P4.6 §5 公开竞品快照 calibration(3 个,基于 §4 样本)───
+// 基于公开 SaaS pricing page / OSS readme 的真实形态样本,补充高可信度梯度。
+// governance §3.1:calibration 工件无硬违规(公开源可信度高、定价新鲜、单位规范)。
+
+/** 公开 SaaS 快照 → high 梯度(官方定价页,source_trust 0.85-0.9) */
+const intelPubSaaS: Artifact = publicCompetitorSampleSaaS;
+
+/** 公开 OSS 快照 → mid 梯度(readme 可能滞后,source_trust 0.75-0.8) */
+const intelPubOSS: Artifact = publicCompetitorSampleOSS;
+
+/** 公开 OSS 低可信样本:readme 长期未更新 + 部分定价模糊 */
+const intelPubOssLow: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'OSSProjectC', feature: 'CLI 工具', pricing: '免费', source: 'github.com/ossprojectc (readme, 6 月未更新)', source_trust: 0.45, last_verified: '2026-02-20' },
+    { competitor_name: 'OSSProjectD', feature: '社区版报表', pricing: '¥0.5/次', source: 'github.com/ossprojectd (discussions)', source_trust: 0.4, last_verified: '2026-01-15' },
+  ],
+};
+
+// ─── P4.6 §5 detection 探针(2 个,各触发对应新 constraint_id)───
+
+/** stale_pricing:全部 last_verified 超 180 天阈值(定价陈旧失效) */
+const violationStalePricing: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'StaleA', feature: '老功能 A', pricing: '¥199/月', source: '官网存档页', source_trust: 0.7, last_verified: '2025-09-01' },
+    { competitor_name: 'StaleB', feature: '老功能 B', pricing: '$29/mo', source: '产品页存档', source_trust: 0.65, last_verified: '2025-08-15' },
+  ],
+};
+
+/** trust_floor:全部 source_trust < 0.2 硬地板(来源几乎不可信) */
+const violationTrustFloor: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'UntrustedA', feature: '匿名声称功能', pricing: '¥99/月', source: '匿名截图', source_trust: 0.1, last_verified: '2026-06-01' },
+    { competitor_name: 'UntrustedB', feature: '无署名爬虫数据', pricing: '$10/mo', source: '无署名爬虫', source_trust: 0.15, last_verified: '2026-05-20' },
+  ],
+};
+
 // ─── violation pattern 异常 case(detection 用途)──────────────
 
 /** time_budget 超限:daily_available_minutes=960 但节点总时长 1200 */
@@ -253,6 +298,15 @@ const expandedAdditions: ExpandedGoldenEntry[] = [
   { id: 'vio-missing-source', family: 'table', region: 'intel', quality_tier: 'low', violation: 'missing_source', purpose: 'detection', artifact: violationMissingSource },
   { id: 'vio-pricing-format', family: 'table', region: 'intel', quality_tier: 'low', violation: 'pricing_format', purpose: 'detection', artifact: violationPricingFormat },
   { id: 'vio-dup-competitor', family: 'table', region: 'intel', quality_tier: 'low', violation: 'duplicate_competitor', purpose: 'detection', artifact: violationDuplicateCompetitor },
+
+  // ─── P4.6 §5 intel 深化:公开快照 calibration(3 个) + 新 detection(2 个) ───
+  // calibration:基于公开 SaaS/OSS 快照,补充高可信度梯度
+  { id: 'intel-pub-saas', family: 'table', region: 'intel', quality_tier: 'high', violation: 'none', purpose: 'calibration', artifact: intelPubSaaS },
+  { id: 'intel-pub-oss', family: 'table', region: 'intel', quality_tier: 'mid', violation: 'none', purpose: 'calibration', artifact: intelPubOSS },
+  { id: 'intel-pub-oss-low', family: 'table', region: 'intel', quality_tier: 'low', violation: 'none', purpose: 'calibration', artifact: intelPubOssLow },
+  // detection:触发 P4.6 新 constraint_id
+  { id: 'vio-stale-pricing', family: 'table', region: 'intel', quality_tier: 'low', violation: 'stale_pricing', purpose: 'detection', artifact: violationStalePricing },
+  { id: 'vio-trust-floor', family: 'table', region: 'intel', quality_tier: 'low', violation: 'trust_floor', purpose: 'detection', artifact: violationTrustFloor },
 
   // ─── P4.3 财务尽调 vertical(financial 族)───
   // calibration:无硬违规,quality 差异在 source_trust(audit 质量)。fin-high=audited, fin-mid=reviewed, fin-low=unaudited。
