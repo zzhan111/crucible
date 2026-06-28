@@ -84,8 +84,8 @@ cat > "$STAGE/MAC-START.md" <<'EOF'
 ## 三步跑通
 ```bash
 cd crucible-portable-*       # 解压出来的目录
-npm install                   # 装 darwin 平台依赖(better-sqlite3/rollup/vite)
-npm start                     # 一键: typecheck → test(355) → demo-report.html
+npm install                   # 装 darwin 平台依赖(better-sqlite3/rollup/vite/pdfkit)
+npm start                     # 一键: typecheck → test(457) → demo-report.html
 ```
 
 `npm start` 全程降级模式(judge=neutral 0.5,无需 API key),约 30 秒完成,
@@ -98,14 +98,22 @@ npm start -- --llm            # τ 校准出真实数值
 ```
 
 ## 验证产物
-- `npm test` → `Test Files 43 passed (43)`, `Tests 355 passed (355)`
+- `npm test` → `Test Files 51 passed (51)`, `Tests 457 passed (457)`
 - `demo-report.html` → 浏览器打开,核对五段(契约卡/τ仪表盘/分数曲线/违规卡/演化/A/B/跨族GO)
+- `npm run dd:financial` → P4.3 财务尽调红旗筛查(6 档案,干净0红旗/3红旗各触发)
+- `npm run audit:golden` → 黄金集覆盖矩阵全 ✓(sequence/table/financial)
+
+## P4 新增能力(本包含全部 P4 commits)
+- P4.1 审计轨迹导出:`CRUCIBLE_DB_PATH=./x.db npm run audit:trail -- --artifact <工件> --format all`(JSON/MD/PDF)
+- P4.2 RBAC + 活动日志:actor_id 落库,human-gate approve:contract 权限检查
+- P4.2.5 可插拔 IdP:users+sessions 表 + IdentityProvider 接口(凭证委托 IdP)
+- P4.3 尽调 vertical:`npm run dd:financial`(财务红旗:偷漏税/现金流/关联方/资不抵债)
 
 ## 常见问题
 - `npm install` 卡在 better-sqlite3:它是 native 模块,Mac 需编译;先装 Xcode CLT
   (`xcode-select --install`)。仍失败:`npm rebuild better-sqlite3`。
 - 无 API key 时 τ=skipped 属正常(降级模式设计内行为)。
-- 完整手测 QA 清单见 `docs/qa/handtest-startup.md`。
+- 完整手测 QA 清单:`docs/qa/handtest-startup.md`(启动)+ `docs/qa/handtest-financial-dd.md`(尽调)。
 EOF
 
 # ── 打 tar.gz ──────────────────────────────────────────
