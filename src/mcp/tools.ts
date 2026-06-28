@@ -63,8 +63,9 @@ const runWorkflowTool: McpTool = {
       artifact_json: { type: 'string', description: 'JSON string of the starting (buggy) artifact' },
       contract_path: { type: 'string', description: 'Path to contract YAML file' },
       known_states: { type: 'array', items: { type: 'string' }, description: 'Known state tokens for Curator novelty detection' },
-      actor_id: { type: 'string', description: 'P4.2 RBAC: 操作者标识(谁触发)。未传默认 system' },
-      actor_role: { type: 'string', enum: ['admin', 'author', 'approver', 'viewer'], description: 'P4.2 RBAC: 操作者角色。未传默认 admin' },
+      session_token: { type: 'string', description: 'P4.2.5 RBAC: 会话 token(优先,经 IdentityProvider 解析 actor)。未传则用 actor_id/actor_role 回退' },
+      actor_id: { type: 'string', description: 'P4.2 RBAC: 操作者标识(回退用,无 session_token 时生效)。默认 system' },
+      actor_role: { type: 'string', enum: ['admin', 'author', 'approver', 'viewer'], description: 'P4.2 RBAC: 操作者角色(回退用)。默认 admin' },
     },
     required: ['artifact_json', 'contract_path'],
   },
@@ -72,10 +73,27 @@ const runWorkflowTool: McpTool = {
     const artifact = parseArtifact(String(args.artifact_json));
     const contract = loadContract(String(args.contract_path));
     const baseScorer = compileContract(contract);
-    const actor = {
-      id: typeof args.actor_id === 'string' ? args.actor_id : 'system',
-      role: (args.actor_role as 'admin' | 'author' | 'approver' | 'viewer') ?? 'admin',
-    };
+    // P4.2.5: 优先从 session_token 解析 actor(经 IdentityProvider);无 token 或解析失败则回退 actor_id/actor_role
+    let actor: { id: string; role: 'admin' | 'author' | 'approver' | 'viewer' };
+    if (typeof args.session_token === 'string' && args.session_token) {
+      const { openAuditDB } = await import('../persistence/db.js');
+      const { StaticTokenProvider, resolveActorFromToken } = await import('../auth/identity-provider.js');
+      const db = openAuditDB();
+      if (db) {
+        const provider = new StaticTokenProvider(db);
+        const resolved = await resolveActorFromToken(db, provider, args.session_token);
+        db.close();
+        actor = resolved ?? { id: 'system', role: 'admin' };
+      } else {
+        // 无审计 DB(未设 CRUCIBLE_DB_PATH)→ token 无法解析,回退
+        actor = { id: typeof args.actor_id === 'string' ? args.actor_id : 'system', role: (args.actor_role as 'admin' | 'author' | 'approver' | 'viewer') ?? 'admin' };
+      }
+    } else {
+      actor = {
+        id: typeof args.actor_id === 'string' ? args.actor_id : 'system',
+        role: (args.actor_role as 'admin' | 'author' | 'approver' | 'viewer') ?? 'admin',
+      };
+    }
     return await runCrucibleWorkflow({
       artifact,
       contract,

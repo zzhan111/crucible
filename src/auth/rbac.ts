@@ -2,16 +2,17 @@
  * P4.2 §2 — 企业内部 RBAC(轻量 actor 标识)。
  *
  * PRD v1.2 §7 禁止闭源多租户 SaaS(AGPL 决定),ToB 是 on-prem 单租户。
- * 所以这里**不建 users 表 / 不做会话** — actor 是外部传入的字符串标识,
+ * 所以这里**不建 user 管理 / 不存密码** — actor 是外部传入的字符串标识,
  * 角色权限矩阵是常量表。这是"够 ToB demo 显式呈现谁有权做什么"的最小实现。
  *
- * 📌 演进路径(P4.2.5,留展望):
- *   当前 actor = { id: string, role: Role },id 由调用方传入(如 MCP client 传用户名)。
- *   完整 RBAC 将加 users 表 + 会话 token + 密码哈希,但**ROLE_PERMISSIONS 矩阵不变** —
- *   权限逻辑是稳定的,变的只是"actor 从哪来"。审计报告展望框会显式说明这条路径,
- *   让 ToB demo 对象看到落地形态。
+ * 📌 演进状态(P4.2.5 已交付):
+ *   P4.2:actor = { id: string, role: Role },id 由调用方传入。
+ *   P4.2.5:加 users + sessions 表(见 003 migration)+ 可插拔 IdentityProvider 接口
+ *   (见 identity-provider.ts)。actor 现可从会话 token 解析。**ROLE_PERMISSIONS 矩阵不变** —
+ *   权限逻辑稳定,变的只是"actor 从哪来"。凭证(密码)委托 IdP(on-prem 企业用 SSO/LDAP),
+ *   Crucible 不存密码,避免安全责任。
  *
- * spec ref: PRD v1.2 §5 §6(ToB on-prem + 审计轨迹);P4.2 plan §2
+ * spec ref: PRD v1.2 §5 §6(ToB on-prem + 审计轨迹);P4.2 plan §2;P4.2.5 plan
  */
 
 /** 角色:企业内部 4 种。覆盖 ToB 典型分工。 */

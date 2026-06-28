@@ -7,6 +7,13 @@ import {
 } from '../../src/fixtures/golden-set-expanded.js';
 import { GOLDEN_ARTIFACTS } from '../../src/fixtures/golden-set.js';
 import { computeGoldenStats, computeFieldStats } from '../../src/curator/novelty_v2.js';
+import { loadContract } from '../../src/contract/validate.js';
+import { compileContract } from '../../src/contract/compiler.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const TABLE_CONTRACT = join(__dirname, '..', '..', 'contracts', 'intel-table-v1.yaml');
 
 describe('P3.5 §2.4 扩容黄金集', () => {
   it('总工件数 ≥ 20', () => {
@@ -69,5 +76,54 @@ describe('P3.5 §2.4 扩容黄金集', () => {
     for (const e of EXPANDED_GOLDEN) {
       expect(e.artifact.nodes.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('P4.5 黄金集 table 族梯度补全', () => {
+  it('EXPANDED_GOLDEN 含新增 3 个 table calibration 工件(总数 23)', () => {
+    const ids = EXPANDED_GOLDEN.map(e => e.id);
+    expect(ids).toContain('intel-high2');
+    expect(ids).toContain('intel-mid2');
+    expect(ids).toContain('intel-low2');
+    expect(EXPANDED_GOLDEN.length).toBe(23);
+  });
+
+  it('table calibration 每个 tier ≥ 2(审计 cell 不再告警)', () => {
+    const tableCalib = EXPANDED_GOLDEN.filter(
+      e => e.family === 'table' && e.purpose === 'calibration'
+    );
+    for (const tier of ['high', 'mid', 'low'] as const) {
+      const count = tableCalib.filter(e => e.quality_tier === tier).length;
+      expect(count, `table/${tier} 应 ≥ 2`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('3 个新工件均无硬违规(governance §3.1:calibration 工件只能 judge 维度差异)', () => {
+    const contract = loadContract(TABLE_CONTRACT);
+    const scorer = compileContract(contract);
+    for (const id of ['intel-high2', 'intel-mid2', 'intel-low2']) {
+      const entry = EXPANDED_GOLDEN.find(e => e.id === id)!;
+      const report = scorer.score(entry.artifact);
+      expect(report.deterministic.hard_violation_count, `${id} 不应有硬违规`).toBe(0);
+    }
+  });
+
+  it('新工件数据与现有不重复(competitor_name 各异,避免 duplicate_competitor)', () => {
+    const newEntries = ['intel-high2', 'intel-mid2', 'intel-low2']
+      .map(id => EXPANDED_GOLDEN.find(e => e.id === id)!)
+      .flatMap(e => e.artifact.nodes.map(n => (n as { competitor_name: string }).competitor_name));
+    const oldEntries = ['intel-high', 'intel-mid', 'intel-low']
+      .map(id => EXPANDED_GOLDEN.find(e => e.id === id)!)
+      .flatMap(e => e.artifact.nodes.map(n => (n as { competitor_name: string }).competitor_name));
+    // 新旧竞品名不重叠(避免数据雷同)
+    for (const name of newEntries) {
+      expect(oldEntries).not.toContain(name);
+    }
+    // 新工件内部无重复竞品名
+    expect(new Set(newEntries).size).toBe(newEntries.length);
+  });
+
+  it('CALIBRATION_GOLDEN 数量同步增长(13 → 16)', () => {
+    expect(CALIBRATION_GOLDEN.length).toBe(16);
   });
 });

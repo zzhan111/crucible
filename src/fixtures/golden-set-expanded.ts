@@ -115,6 +115,40 @@ const intelLow: Artifact = {
   ],
 };
 
+// ─── P4.5 table 族梯度补全:每 tier +1 无违规 calibration 工件(审计 cell ≥2) ───
+// governance §3.1:calibration 工件无硬违规,质量差异只在 judge 维度。
+// 现有 intel-high/mid/low 各仅 1 个(audit:golden 报 ~ 告警),这里各补一个不同数据。
+
+/** table/high 第二样本:企业级 SaaS,来源多元、可信度高 */
+const intelHigh2: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'CompG', feature: '可视化看板', pricing: '¥199/月', source: '官网定价页', source_trust: 0.88, last_verified: '2026-06-15' },
+    { competitor_name: 'CompH', feature: 'API 集成', pricing: '$79/mo', source: '开发者文档', source_trust: 0.85, last_verified: '2026-06-10' },
+    { competitor_name: 'CompI', feature: '团队协作', pricing: '¥399/月', source: '产品页', source_trust: 0.8, last_verified: '2026-05-28' },
+  ],
+};
+
+/** table/mid 第二样本:中等可信度,部分来源偏弱 */
+const intelMid2: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'CompJ', feature: '自动化规则', pricing: '¥149/月', source: '技术博客评测', source_trust: 0.55, last_verified: '2026-04-20' },
+    { competitor_name: 'CompK', feature: '邮件提醒', pricing: '¥29/月', source: '应用商店', source_trust: 0.5, last_verified: '2026-03-15' },
+  ],
+};
+
+/** table/low 第二样本:低可信度但合规(有 source、pricing 合法、无重复) */
+const intelLow2: Artifact = {
+  family: 'table',
+  metadata: { day: 1 },
+  nodes: [
+    { competitor_name: 'CompL', feature: '单页表单', pricing: '¥9/月', source: '论坛帖', source_trust: 0.25, last_verified: '2026-01-10' },
+  ],
+};
+
 // ─── violation pattern 异常 case(detection 用途)──────────────
 
 /** time_budget 超限:daily_available_minutes=960 但节点总时长 1200 */
@@ -206,6 +240,9 @@ const expandedAdditions: ExpandedGoldenEntry[] = [
   { id: 'intel-high', family: 'table', region: 'intel', quality_tier: 'high', violation: 'none', purpose: 'calibration', artifact: intelHigh },
   { id: 'intel-mid', family: 'table', region: 'intel', quality_tier: 'mid', violation: 'none', purpose: 'calibration', artifact: intelMid },
   { id: 'intel-low', family: 'table', region: 'intel', quality_tier: 'low', violation: 'none', purpose: 'calibration', artifact: intelLow },
+  { id: 'intel-high2', family: 'table', region: 'intel', quality_tier: 'high', violation: 'none', purpose: 'calibration', artifact: intelHigh2 },
+  { id: 'intel-mid2', family: 'table', region: 'intel', quality_tier: 'mid', violation: 'none', purpose: 'calibration', artifact: intelMid2 },
+  { id: 'intel-low2', family: 'table', region: 'intel', quality_tier: 'low', violation: 'none', purpose: 'calibration', artifact: intelLow2 },
   { id: 'vio-time-budget', family: 'sequence', region: 'hongkong', quality_tier: 'low', violation: 'time_budget', purpose: 'detection', artifact: violationTimeBudget },
   { id: 'vio-state-mutex', family: 'sequence', region: 'hongkong', quality_tier: 'low', violation: 'state_mutex', purpose: 'detection', artifact: violationStateMutex },
   { id: 'vio-dup-state', family: 'sequence', region: 'yunnan', quality_tier: 'low', violation: 'duplicate_state', purpose: 'detection', artifact: violationDuplicateState },

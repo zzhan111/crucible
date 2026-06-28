@@ -37,9 +37,9 @@ describe('P4.2 全量活动日志 + append-only 历史', () => {
       expect(cols).toContain('decided_at');
       expect(cols).toContain('actor_id');
     });
-    it('schema_version 记录 v1 + v2', () => {
+    it('schema_version 记录 v1 + v2 + v3(P4.2.5 加 003)', () => {
       const versions = (db.prepare('SELECT version FROM schema_version ORDER BY version').all() as Array<{ version: number }>).map(r => r.version);
-      expect(versions).toEqual([1, 2]);
+      expect(versions).toEqual([1, 2, 3]);
     });
     it('idx_score_runs_artifact_contract(unique)已删 — append-only', () => {
       const idxs = (db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='score_runs'").all() as Array<{ name: string }>).map(r => r.name);

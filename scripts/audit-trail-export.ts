@@ -35,7 +35,7 @@ import { exportAuditJson, exportAuditMarkdown } from '../src/audit/export.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-function main(): void {
+async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       artifact: { type: 'string' },
@@ -44,9 +44,16 @@ function main(): void {
       actor: { type: 'string' },        // P4.2: 按操作者过滤
       since: { type: 'string' },        // P4.2: 时间窗起始(含)
       until: { type: 'string' },        // P4.2: 时间窗截止(含)
+      format: { type: 'string', default: 'all' }, // P4.1.2: json|md|pdf|all
     },
     strict: true,
   });
+
+  const fmt = (values.format ?? 'all').toLowerCase();
+  if (!['json', 'md', 'pdf', 'all'].includes(fmt)) {
+    console.error(`错误: --format 仅支持 json|md|pdf|all(收到 ${fmt})`);
+    process.exit(1);
+  }
 
   if (!values.artifact) {
     console.error('错误: 缺少 --artifact <工件.json>');
@@ -93,9 +100,19 @@ function main(): void {
   const base = `audit-${trail.artifact_hash}-${date}`;
   const jsonPath = join(outDir, `${base}.json`);
   const mdPath = join(outDir, `${base}.md`);
+  const pdfPath = join(outDir, `${base}.pdf`);
 
-  writeFileSync(jsonPath, exportAuditJson(trail), 'utf8');
-  writeFileSync(mdPath, exportAuditMarkdown(trail, activityLog), 'utf8');
+  const wantJson = fmt === 'all' || fmt === 'json';
+  const wantMd = fmt === 'all' || fmt === 'md';
+  const wantPdf = fmt === 'all' || fmt === 'pdf';
+
+  if (wantJson) writeFileSync(jsonPath, exportAuditJson(trail), 'utf8');
+  if (wantMd) writeFileSync(mdPath, exportAuditMarkdown(trail, activityLog), 'utf8');
+  if (wantPdf) {
+    const { exportAuditPdf } = await import('../src/audit/export.js');
+    const buf = await exportAuditPdf(trail, activityLog);
+    writeFileSync(pdfPath, buf);
+  }
 
   console.log('=== 审计轨迹导出完成 ===');
   console.log(`工件 hash:    ${trail.artifact_hash}`);
@@ -103,8 +120,9 @@ function main(): void {
   console.log(`契约版本:     ${trail.runs.map(r => 'v' + r.contract_version).join(', ')}`);
   console.log(`操作者:       ${trail.runs.map(r => r.actor_id ?? 'system').filter((v, i, a) => a.indexOf(v) === i).join(', ')}`);
   console.log(`活动日志条数: ${activityLog.length}`);
-  console.log(`JSON 报告:    ${jsonPath}`);
-  console.log(`Markdown 报告: ${mdPath}`);
+  if (wantJson) console.log(`JSON 报告:    ${jsonPath}`);
+  if (wantMd) console.log(`Markdown 报告: ${mdPath}`);
+  if (wantPdf) console.log(`PDF 报告:     ${pdfPath}`);
 }
 
 main();
