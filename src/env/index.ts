@@ -12,6 +12,9 @@ import { randomUUID } from 'node:crypto';
 import type { Artifact } from '../predicates/types.js';
 import type { Contract } from '../contract/schema.js';
 import type { EnvHandle, EventBus, EventSource, LiveEnvEvent } from './types.js';
+
+/** §5: workflow 接线点 — 重新导出,供 src/workflow/crucible.ts 通过 env 入口引入。 */
+export type { EnvHandle } from './types.js';
 import { createEventBus } from './event-bus.js';
 import { createReplayEventSource } from './event-source/replay.js';
 import { consumeEvents } from './consumer.js';

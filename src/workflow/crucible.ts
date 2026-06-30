@@ -5,6 +5,7 @@ import type { ScoreReport } from '../scorer/types.js';
 import type { ArtifactPatch } from '../patch/types.js';
 import type { DB } from '../persistence/db.js';
 import type { Actor } from '../auth/rbac.js';
+import type { EnvHandle } from '../env/index.js';
 import { SYSTEM_ACTOR } from '../auth/rbac.js';
 import { scorerRun } from '../agents/scorer.js';
 import { generatePatches } from '../agents/critic.js';
@@ -33,6 +34,11 @@ export interface CrucibleRunInput {
    * actor.id 落入 score_runs.actor_id,审计可追溯"谁评分"。
    */
   actor?: Actor;
+  /**
+   * §5: 可选 live env handle。未传 → 行为完全等同 P3.5(老路径)。
+   * 传入 → 每轮迭代开始时调用 env.consume(artifact),把累积事件折叠进 artifact。
+   */
+  liveEnv?: EnvHandle;
 }
 
 export interface CrucibleIteration {
@@ -40,6 +46,8 @@ export interface CrucibleIteration {
   score: number;
   violations: number;
   patchesApplied: number;
+  /** §5: 本轮 consume 折叠的事件 id 列表(空数组 = 未开 env 或本轮无事件)。 */
+  consumedEventIds: string[];
 }
 
 export interface CrucibleRunResult {
@@ -74,6 +82,14 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     console.log(`\n[Workflow] === Iteration ${i + 1}/${MAX_ITERATIONS} ===`);
 
+    // §5: 轮间拉取 env 事件并折叠(env 未启用时 consume 是 no-op,但这里 liveEnv 未传则跳过)
+    let consumedEventIds: string[] = [];
+    if (input.liveEnv) {
+      const envResult = input.liveEnv.consume(currentArtifact);
+      currentArtifact = envResult.artifact;
+      consumedEventIds = envResult.appliedEventIds;
+    }
+
     // 1. Score(pre-patch,用于 Critic 读 violations)
     // eng-review C3 (P1 §2.9): Critic 只读 deterministic.violations,不需要 judge。
     // 用 baseScorer(纯确定性)而非 scorerRun(含 LLM judge),省一半 LLM 调用。
@@ -107,6 +123,7 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
       score: postPatchReport.final_score,
       violations: prePatchReport.deterministic.hard_violation_count,
       patchesApplied: patches.length,
+      consumedEventIds,
     });
 
     // 5. Curator(检测 post-patch artifact 新颖度)
