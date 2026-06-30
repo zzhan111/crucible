@@ -1,0 +1,3 @@
+{"id":"660e8400-e29b-41d4-a716-4466554400b1","scenario":"intel-drift","t_offset_ms":0,"emitted_by":"replay","kind":"info_drop","target_field":"pricing","target_locator":"1","new_value":"$25/mo (was $40)","evidence":"https://example.com/pricing-update","source_trust":0.85}
+{"id":"660e8400-e29b-41d4-a716-4466554400b2","scenario":"intel-drift","t_offset_ms":5000,"emitted_by":"replay","kind":"disruption","subject":"2","reason":"Competitor C acquired, source removed","severity":"major","invalidates":["competitor_active"]}
+{"id":"660e8400-e29b-41d4-a716-4466554400b3","scenario":"intel-drift","t_offset_ms":10000,"emitted_by":"replay","kind":"constraint_update","constraint_id":"stale_pricing","new_threshold":90,"reason":" tighten freshness to 90 days for active monitoring"}

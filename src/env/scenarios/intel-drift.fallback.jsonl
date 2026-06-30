@@ -1,0 +1,3 @@
+{"id":"880e8400-e29b-41d4-a716-4466554400a1","scenario":"intel-drift","t_offset_ms":0,"emitted_by":"fixture","kind":"info_drop","target_field":"pricing","target_locator":"0","new_value":"$30/mo","evidence":"fallback://example.com","source_trust":0.7}
+{"id":"880e8400-e29b-41d4-a716-4466554400a2","scenario":"intel-drift","t_offset_ms":5000,"emitted_by":"fixture","kind":"disruption","subject":"1","reason":"fallback: vendor downtime","severity":"minor","invalidates":[]}
+{"id":"880e8400-e29b-41d4-a716-4466554400a3","scenario":"intel-drift","t_offset_ms":10000,"emitted_by":"fixture","kind":"constraint_update","constraint_id":"stale_pricing","new_threshold":120,"reason":"fallback: loosen freshness"}
