@@ -89,7 +89,9 @@ Rules:
 
 If no revision is needed, respond with []`;
 
-  const raw = await callLLM(prompt);
+  // tier='slow':contract 修订影响半径大(决定后续所有评分),走慢脑模型。
+  // 见 docs/superpowers/specs/2026-06-30-llm-tier-routing-design.md
+  const raw = await callLLM(prompt, 'slow');
   if (!raw) {
     console.log('[Contract-Author] LLM returned null, returning empty diff');
     return [];
