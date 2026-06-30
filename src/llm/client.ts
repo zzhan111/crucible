@@ -36,3 +36,67 @@ export async function callLLM(prompt: string): Promise<string | null> {
     return null;
   }
 }
+
+export interface LLMJsonOptions {
+  temperature?: number;
+  seed?: number;
+  systemPrompt?: string;
+}
+
+/**
+ * Pure JSON parser for LLM text output. Trims, strips ```json fences,
+ * parses, and returns null on empty input or parse failure.
+ *
+ * Exported so tests can exercise the parsing logic without invoking the SDK.
+ */
+export function parseLLMJson(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 结构化 JSON 输出变体。复用 createOpenAI 模式,但:
+ * - 传 temperature/seed(录制期需要,不影响 judge 的 callLLM)
+ * - 解析返回文本为 JSON(parseLLMJson),失败返回 null
+ * - 无 API key / 出错 → null(同 callLLM 降级模式)
+ *
+ * 注:reasoning model 可能不支持 temperature;调用方传了就传,SDK 会忽略或报错——
+ * 报错走 catch 返回 null,不 crash。
+ */
+export async function callLLMJson(
+  prompt: string,
+  opts: LLMJsonOptions = {}
+): Promise<Record<string, unknown> | null> {
+  if (!hasApiKey()) {
+    console.warn('[LLM] OPENAI_API_KEY missing, callLLMJson returns null');
+    return null;
+  }
+  try {
+    const openai = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    });
+    const model = process.env.OPENAI_MODEL || 'gpt-4o';
+    const result = await generateText({
+      model: openai.chat(model),
+      ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
+      prompt,
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts.seed !== undefined ? { seed: opts.seed } : {}),
+    });
+    return parseLLMJson(result.text);
+  } catch (err) {
+    console.warn(`[LLM] callLLMJson failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
