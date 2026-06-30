@@ -16,6 +16,10 @@ export interface Artifact {
     currency?: string;
     audit_status?: 'audited' | 'reviewed' | 'unaudited';
     company?: string;
+    // Live Env v1: constraint_update 事件写入的运行时阈值覆盖。
+    // Scorer 评估硬约束时优先读这里,fallback 到 contract 原阈值。
+    // env 关闭时此字段 undefined,行为等同 P3.5。
+    runtime_overrides?: Record<string, unknown>;
   };
 }
 
