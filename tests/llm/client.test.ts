@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { callLLM, hasApiKey } from '../../src/llm/client.js';
 
 describe('LLM client', () => {
@@ -35,5 +35,61 @@ describe('LLM client', () => {
     ]);
     expect(result === null || typeof result === 'string').toBe(true);
     delete process.env.OPENAI_API_KEY;
+  });
+});
+
+describe('resolveModel (tier 路由)', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL_SLOW;
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    delete process.env.OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL_SLOW;
+  });
+
+  it('fast tier 读 OPENAI_MODEL', async () => {
+    process.env.OPENAI_MODEL = 'deepseek-v3';
+    const { resolveModel } = await import('../../src/llm/client.js');
+    expect(resolveModel('fast')).toBe('deepseek-v3');
+  });
+
+  it('fast tier 缺失时退到 gpt-4o', async () => {
+    const { resolveModel } = await import('../../src/llm/client.js');
+    expect(resolveModel('fast')).toBe('gpt-4o');
+  });
+
+  it('slow tier 优先读 OPENAI_MODEL_SLOW', async () => {
+    process.env.OPENAI_MODEL = 'deepseek-v3';
+    process.env.OPENAI_MODEL_SLOW = 'deepseek-r1';
+    const { resolveModel } = await import('../../src/llm/client.js');
+    expect(resolveModel('slow')).toBe('deepseek-r1');
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('slow tier 缺失 SLOW 时降级到 FAST', async () => {
+    process.env.OPENAI_MODEL = 'deepseek-v3';
+    const { resolveModel } = await import('../../src/llm/client.js');
+    expect(resolveModel('slow')).toBe('deepseek-v3');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/tier=slow not configured/));
+  });
+
+  it('slow tier 双缺失时降级到 gpt-4o', async () => {
+    const { resolveModel } = await import('../../src/llm/client.js');
+    expect(resolveModel('slow')).toBe('gpt-4o');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/tier=slow not configured/));
+  });
+
+  it('slow tier 首次降级 warn,第二次静默', async () => {
+    const { resolveModel } = await import('../../src/llm/client.js');
+    resolveModel('slow');
+    resolveModel('slow');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });

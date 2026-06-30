@@ -1,6 +1,33 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 
+export type ModelTier = 'fast' | 'slow';
+
+// 模块级去重 flag:进程内只 warn 1 次"slow tier 降级"
+let slowFallbackWarned = false;
+
+/**
+ * resolveModel: 按 tier 路由模型名。纯函数(除首次 slow 降级 warning)。
+ * - 'fast' → OPENAI_MODEL || 'gpt-4o'
+ * - 'slow' → OPENAI_MODEL_SLOW || OPENAI_MODEL || 'gpt-4o'(并 warn 1 次)
+ *
+ * 灵感:MIRA Nature 论文按"决策影响半径"分层(GPT-4o 执行 + o1 规划)。
+ * 决议来源:docs/superpowers/specs/2026-06-30-llm-tier-routing-design.md
+ */
+export function resolveModel(tier: ModelTier): string {
+  const fast = process.env.OPENAI_MODEL || 'gpt-4o';
+  if (tier === 'fast') return fast;
+  const slow = process.env.OPENAI_MODEL_SLOW;
+  if (slow) return slow;
+  if (!slowFallbackWarned) {
+    console.warn(
+      '[LLM] tier=slow not configured, falling back to fast (set OPENAI_MODEL_SLOW to enable)'
+    );
+    slowFallbackWarned = true;
+  }
+  return fast;
+}
+
 export function hasApiKey(): boolean {
   return !!process.env.OPENAI_API_KEY;
 }
