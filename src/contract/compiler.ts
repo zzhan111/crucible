@@ -25,6 +25,16 @@ const HARD_VIOLATION_PENALTY = 0.15;
 export interface CompiledScorer extends Scorer {
   deterministicPredicateCount: number;
   deterministicRubricCount: number;
+  /**
+   * 编译期告警:契约里有 declarative constraint id / deterministic rubric dim
+   * 未注册到 compiler,或 state_mutex 注册但 mutex 字段缺失。
+   *
+   * **跳过是 forward-compat 设计**(DSL §5.4):新版契约加新约束,旧编译器忽略不崩。
+   * 但跳过应"可观测",而非悄无声息 — warnings 让上层(审计/测试/CI)能查到漏装。
+   *
+   * 不抛错以保持 forward compat;同步 console.warn 立即可见。
+   */
+  warnings: string[];
 }
 
 /**
@@ -38,8 +48,12 @@ export interface CompiledScorer extends Scorer {
  * 字段),但 compiler 不处理它。Contract-Author Agent(Part 2)若生成新约束 ID,
  * compiler 直接跳过。P1 升级路径:用 isolated-vm 沙箱支持 code_predicate.impl 动态加载,
  * 让契约真可执行(贴合 PRD §6 混合 DSL)。P0 避免沙箱依赖 + 安全审计。
+ *
+ * P4.6.1 告警:未注册的 declarative id / deterministic dim 仍跳过(forward compat),
+ * 但收集到 warnings + console.warn,让漏装可观测(评估发现的静默失败问题)。
  */
 export function compileContract(contract: Contract): CompiledScorer {
+  const warnings: string[] = [];
   const predicates: Predicate[] = [];
   for (const c of contract.hard_constraints) {
     // P2 §2.1: code_predicate 用沙箱动态加载(isolated-vm)
@@ -52,6 +66,11 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'state_mutex':
         if (c.type === 'declarative' && c.mutex && c.mutex.length >= 2) {
           predicates.push(makeStateMutex(c.mutex));
+        } else {
+          // 注册了 id 但 mutex 字段无效 — 这是契约错误,不是 forward compat
+          const w = `state_mutex constraint declared but mutex field missing or has <2 tokens; skipped`;
+          warnings.push(w);
+          console.warn(`[compiler] ${w}`);
         }
         break;
       case 'time_budget': predicates.push(timeBudget); break;
@@ -64,9 +83,13 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'stale_pricing': predicates.push(makeStalePricing()); break;
       case 'source_trust_floor': predicates.push(sourceTrustFloor); break;
       case 'unit_consistency': predicates.push(unitConsistency); break;
-      default:
-        // 未知 declarative 约束跳过
+      default: {
+        // 未知 declarative 约束:forward compat 跳过,但告警(可观测)
+        const w = `unknown declarative constraint id "${c.id}"; skipped (forward compat — register a predicate in compiler.ts to activate)`;
+        warnings.push(w);
+        console.warn(`[compiler] ${w}`);
         break;
+      }
     }
   }
 
@@ -83,13 +106,20 @@ export function compileContract(contract: Contract): CompiledScorer {
       case 'ratio_health': rubrics.push(ratioHealth); break;
       // P4.6 §2 intel 深化:差异点密度
       case 'differentiator_density': rubrics.push(differentiatorDensity); break;
-      default: break;
+      default: {
+        // 未知 deterministic dim:forward compat 跳过,但告警
+        const w = `unknown deterministic rubric dim "${r.dim}"; skipped (forward compat — register a rubric in compiler.ts to activate)`;
+        warnings.push(w);
+        console.warn(`[compiler] ${w}`);
+        break;
+      }
     }
   }
 
   return {
     deterministicPredicateCount: predicates.length,
     deterministicRubricCount: rubrics.length,
+    warnings,
     score(artifact: Artifact): ScoreReport {
       const allViolations: Violation[] = [];
       for (const p of predicates) allViolations.push(...p(artifact));
