@@ -30,7 +30,11 @@ __pycache__/
 *$py.class
 .venv/
 venv/
-ENV/
+/ENV/
+# Crucible Live Env feature dirs (src/env, tests/env) must NOT be shadowed
+# by the case-insensitive /ENV/ rule above on Windows (core.ignorecase=true).
+!/src/env/
+!/tests/env/
 
 # --- Build / dist (if added) ---
 dist/
