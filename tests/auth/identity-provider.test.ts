@@ -25,9 +25,9 @@ describe('P4.2.5 可插拔身份提供者(users+sessions+IdP)', () => {
       expect(u).toBeDefined();
       expect(u!.role).toBe('admin');
     });
-    it('schema_version 记录 v1+v2+v3', () => {
+    it('schema_version 记录 v1+v2+v3+v4', () => {
       const versions = (db.prepare('SELECT version FROM schema_version ORDER BY version').all() as Array<{ version: number }>).map(r => r.version);
-      expect(versions).toEqual([1, 2, 3]);
+      expect(versions).toEqual([1, 2, 3, 4]);
     });
   });
 
