@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import 'dotenv/config'; // 加载 .env → OPENAI_API_KEY 传入 tsx 子进程,judge 不再降级为 0.5
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TSX = join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');

@@ -39,6 +39,11 @@ export interface CrucibleRunInput {
    * 传入 → 每轮迭代开始时调用 env.consume(artifact),把累积事件折叠进 artifact。
    */
   liveEnv?: EnvHandle;
+  /**
+   * 提前收敛阈值。未传 → 模块常量 MIN_IMPROVEMENT (0.01),与现有测试与生产行为一致。
+   * 路演 demo 可传 0(或负数)强制跑满 MAX_ITERATIONS 轮,让分数曲线有完整 v1/v2/v3 三段。
+   */
+  minImprovement?: number;
 }
 
 export interface CrucibleIteration {
@@ -137,12 +142,13 @@ export async function runCrucibleWorkflow(input: CrucibleRunInput): Promise<Cruc
     // 6. 更新 currentArtifact 为 post-patch(下一轮输入)
     currentArtifact = postPatchArtifact;
 
-    // 7. 终止条件:post-patch 提升 < MIN_IMPROVEMENT(比较本轮 post-patch vs 上轮 post-patch)
+    // 7. 终止条件:post-patch 提升 < minImprovement(比较本轮 post-patch vs 上轮 post-patch)
     if (i > 0 && allIterations.length >= 2) {
       const prevPostPatchScore = allIterations[allIterations.length - 2].score;
       const currPostPatchScore = allIterations[allIterations.length - 1].score;
-      if (currPostPatchScore - prevPostPatchScore < MIN_IMPROVEMENT) {
-        console.log(`[Workflow] improvement < ${MIN_IMPROVEMENT}, stopping`);
+      const threshold = input.minImprovement ?? MIN_IMPROVEMENT;
+      if (currPostPatchScore - prevPostPatchScore < threshold) {
+        console.log(`[Workflow] improvement < ${threshold}, stopping`);
         break;
       }
     }
