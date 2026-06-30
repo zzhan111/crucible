@@ -242,6 +242,116 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 3vw, 2.4rem); align-items: center; }
 @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
 
+/* Apps · Output 2x2 grid:左侧大窗 financial 跨两行,右上 intel,右下 DSL */
+.apps-grid {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: clamp(0.5rem, 1vw, 0.9rem);
+  flex: 1;
+  min-height: 0;
+}
+.apps-grid > .code-win {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.apps-grid > .code-win.span2 { grid-row: span 2; }
+.apps-grid pre { flex: 1; overflow: hidden; }
+.tw-cursor::after {
+  content: "▌";
+  color: var(--accent-cyan);
+  animation: tw-blink 0.9s steps(2, start) infinite;
+  margin-left: 1px;
+}
+@keyframes tw-blink { to { opacity: 0; } }
+
+/* ============================================================
+   Slide 5 旅行 buggy↔golden 循环展示
+   ============================================================ */
+.trip-cycle {
+  position: relative;
+  display: block;
+  min-height: clamp(280px, 38vw, 460px);
+}
+.trip-card {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  background: #05080f;
+  border: 1px solid rgba(120, 160, 220, 0.2);
+  border-radius: clamp(8px, 1vw, 12px);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.45s var(--ease-out-expo);
+}
+.trip-card.is-active { opacity: 1; }
+.trip-card .bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0.55em 0.9em;
+  background: #0a0f1d;
+  border-bottom: 1px solid rgba(120,160,220,0.15);
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  color: var(--text-dim);
+}
+.trip-card .bar::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%; background: #ff5f57;
+  box-shadow: 14px 0 0 #febc2e, 28px 0 0 #28c840;
+  margin-right: 28px;
+}
+.trip-card .fn { margin-left: auto; }
+.trip-card .body {
+  flex: 1;
+  padding: clamp(0.6rem, 1.4vw, 1rem) clamp(0.7rem, 1.6vw, 1.1rem);
+  display: flex; flex-direction: column;
+  gap: clamp(0.35rem, 0.9vw, 0.55rem);
+  overflow: hidden;
+}
+.trip-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.6em;
+  align-items: baseline;
+  font-family: var(--font-body);
+  font-size: clamp(0.78rem, 1.25vw, 0.98rem);
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+.trip-row .t { font-family: var(--font-mono); color: var(--accent-cyan); font-size: 0.95em; min-width: 6.5em; }
+.trip-row .ic { font-size: 1.1em; }
+.trip-row .a { color: var(--text-primary); }
+.trip-row .r { color: var(--text-dim); font-size: 0.85em; display: block; grid-column: 3 / 4; margin-top: 0.1em; }
+.trip-row .cost { font-family: var(--font-mono); color: var(--text-dim); font-size: 0.88em; justify-self: end; }
+.trip-row.chip-row {
+  grid-template-columns: 1fr;
+  gap: 0.4em;
+  justify-items: center;
+  padding: 0.3em 0;
+}
+.trip-row.chip-row .chips { display: inline-flex; gap: 0.5em; flex-wrap: wrap; justify-content: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.3em;
+  padding: 0.18em 0.7em;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.chip-bad  { color: #ff7a7a; border-color: rgba(255, 95, 87, 0.55); background: rgba(255, 95, 87, 0.08); }
+.chip-good { color: #6fe09a; border-color: rgba(40, 200, 100, 0.55); background: rgba(40, 200, 100, 0.08); }
+
+/* golden 行程里新插入的 transit/switch 节点:从右滑入 + 错峰 */
+.trip-card.trip-after.is-active .trip-row.is-inserting {
+  animation: trip-slide-in 0.55s var(--ease-out-expo) both;
+  animation-delay: var(--d, 0s);
+}
+.trip-card.trip-after .trip-row.is-inserting { opacity: 0; transform: translateX(18px); }
+@keyframes trip-slide-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* Footer chrome */
 .chrome {
   position: absolute;
@@ -287,6 +397,23 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
 .slide.visible .reveal:nth-child(3) { transition-delay: 0.27s; }
 .slide.visible .reveal:nth-child(4) { transition-delay: 0.38s; }
 .slide.visible .reveal:nth-child(5) { transition-delay: 0.49s; }
+
+/* Cinematic entrance for embedded demo videos —— 比 .reveal 更大幅度的位移 + 缩放 + 去模糊,
+   翻到这一页时视频像被舞台灯打亮一样登场,延迟 0.6s 让文字 reveal 先落位。 */
+.video-reveal {
+  opacity: 0;
+  transform: translateY(44px) scale(0.94);
+  filter: blur(4px);
+  transition:
+    opacity 0.95s var(--ease-out-expo) 0.6s,
+    transform 0.95s var(--ease-out-expo) 0.6s,
+    filter 0.95s var(--ease-out-expo) 0.6s;
+}
+.slide.visible .video-reveal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
 
 /* Title slide special motion */
 .title-slide h1 .line { display: block; overflow: hidden; }
@@ -334,15 +461,15 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
       <span class="line"><span class="gradient-text">via a contract,</span></span>
       <span class="line"><span>not chat messages.</span></span>
     </h1>
-    <p class="reveal lead" style="font-size:var(--h3-size); max-width:42ch;">Crucible —— 契约驱动合成引擎</p>
+    <p class="reveal lead" style="font-size:var(--h3-size); max-width:42ch;">Crucible —— 多智能体协作引擎</p>
     <p class="reveal" style="margin-top:var(--element-gap); max-width:52ch;">让多智能体通过一份可执行的共享契约，自动发现缺陷、自动迭代，在模拟环境中跑出最佳结果，融合快慢思考。</p>
     <div class="reveal" style="margin-top:var(--content-gap); display:flex; gap:0.6rem; flex-wrap:wrap;">
-      <span class="tag">LLM 多智能体</span>
+      <span class="tag">大模型多智能体</span>
       <span class="tag m">可执行契约 DSL</span>
       <span class="tag">自动抓缺陷</span>
     </div>
   </div>
-  <div class="chrome"><span>CRUCIBLE</span><span>01 / 12</span></div>
+  <div class="chrome"><span>CRUCIBLE</span><span>01 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 2 · PROBLEM ════════ -->
@@ -352,7 +479,7 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
     <h2 class="reveal" style="margin-bottom:var(--content-gap);">多智能体系统,<span class="gradient-text">协调是个黑箱</span>。</h2>
     <div class="split">
       <ul class="bullet-list reveal">
-        <li><span><b>靠聊天消息协调</b> —— agent 之间自然语言传递,出错无法定位谁偏离了标准</span></li>
+        <li><span><b>靠聊天消息协调</b> —— 智能体之间靠聊天消息沟通,出错无法定位谁偏离了标准</span></li>
         <li><span><b>"好"的标准锁死在代码里</b> —— 改一条评分规则要改代码、改测试、重新部署</span></li>
         <li><span><b>每个团队重造轮子</b> —— 评分 + 迭代逻辑各自手写,不可复用、不可观测</span></li>
         <li><span><b>demo 不可信</b> —— PPT 与 cherry-pick 截图,不是可运行的可执行契约</span></li>
@@ -360,20 +487,20 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
       <div class="reveal card" style="border-color:rgba(255,62,165,0.35);">
         <div class="num">PAIN · TODAY</div>
         <h3 style="margin-top:0.4em;">"哪个 agent 判断错了?"</h3>
-        <p style="margin-top:0.5em;">在 prompt 黑箱里,这个问题<span style="color:var(--accent-magenta);">无法回答</span>。协调没有事实层,只有消息流。</p>
+        <p style="margin-top:0.5em;">在 prompt 黑箱里,<span style="color:var(--accent-magenta);">没人答得上来</span>。一群智能体只有聊天记录,没有一份谁都能查的对账单。</p>
       </div>
     </div>
   </div>
-  <div class="chrome"><span>PROBLEM</span><span>02 / 12</span></div>
+  <div class="chrome"><span>PROBLEM</span><span>02 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 3 · INSIGHT ════════ -->
 <section class="slide" data-title="洞察">
-  <div class="slide-content" style="align-items:center; text-align:center;">
+  <div class="slide-content" style="align-items:center; text-align:center; gap:clamp(0.5rem, 1.2vw, 1rem);">
     <div class="eyebrow reveal" style="text-align:center;"><span class="dot">◆</span> THE INSIGHT</div>
-    <h2 class="reveal" style="max-width:20ch; margin-bottom:var(--content-gap);">把"交付维度"<br><span class="gradient-text">写成一份可编译的契约。</span></h2>
-    <p class="reveal lead" style="max-width:60ch;">契约不是文档，是<b style="color:var(--accent-cyan);">可编辑评价系统</b>。改契约 = 改评价维度，结合场景极易轮换。所有 Agent 围绕这份共享 YAML 协调 —— 而不是互相注入 Prompt。</p>
-    <div class="reveal" style="margin-top:var(--content-gap); text-align:center;">
+    <h2 class="reveal" style="max-width:20ch;">把"交付维度"<br><span class="gradient-text">写成一份可编译的契约。</span></h2>
+    <p class="reveal lead" style="max-width:60ch;">契约不是文档，是<b style="color:var(--accent-cyan);">可编辑的评分标准</b>。改契约就是改评分标准，换个场景只换契约，不换引擎。所有智能体读同一份 YAML，不是互相注入 Prompt。</p>
+    <div class="reveal" style="text-align:center;">
       <span style="
         display:inline-block;
         font-family:var(--font-body);
@@ -387,8 +514,21 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
         box-shadow:0 0 32px var(--accent-glow-c), 0 0 64px var(--accent-glow-m);
       ">引擎通用，场景外置</span>
     </div>
+    <div class="video-reveal" data-autoplay-on-visible style="
+      margin-top:clamp(0.6rem, 1.8vw, 1.6rem);
+      width:min(680px, 88vw);
+      aspect-ratio:16/9;
+      border-radius:clamp(8px, 1vw, 14px);
+      overflow:hidden;
+      border:1px solid rgba(34,227,255,0.35);
+      box-shadow:0 0 24px var(--accent-glow-c), 0 0 48px var(--accent-glow-m);
+    ">
+      <video src="assets/crucible-live-env-demo.webm"
+             muted loop playsinline preload="auto"
+             style="display:block; width:100%; height:100%; object-fit:cover;"></video>
+    </div>
   </div>
-  <div class="chrome"><span>INSIGHT</span><span>03 / 12</span></div>
+  <div class="chrome"><span>INSIGHT</span><span>03 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 4 · HOW IT WORKS (3 pillars) ════════ -->
@@ -396,7 +536,7 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
   <div class="slide-content">
     <div class="eyebrow reveal"><span class="dot">◆</span> HOW IT WORKS · 一个契约,三件事</div>
     <h2 class="reveal" style="margin-bottom:var(--content-gap);">
-      契约不是文档,<span class="gradient-text">是 agents 共享的事实层。</span>
+      契约不是文档,<span class="gradient-text">是智能体共享的事实层。</span>
     </h2>
 
     <!-- 契约骨干横条:贯穿三个支柱 -->
@@ -412,9 +552,9 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
       <!-- 支柱 1:闭环迭代 -->
       <div class="card" style="border-color:rgba(34,227,255,0.35);">
         <div class="num">① LOOP · 自动发现缺陷</div>
-        <h3>Scorer → Critic → Curator</h3>
+        <h3>打分 → 诊断 → 演化</h3>
         <p style="margin-top:0.4em;">
-          确定性谓词读违规 → 生成 patch(零 LLM)→ Curator 验新颖度 → v2/v3。
+          按照硬约束自动检查 → 发现违规不调 LLM 直接修 → Curator 检验新颖度 → 进入下一轮。
           <b style="color:var(--text-primary);">3 轮内分数单调上升</b>,提升 &lt; 0.01 即止。
         </p>
       </div>
@@ -425,7 +565,7 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
         <h3>边走边吐事件的模拟器</h3>
         <p style="margin-top:0.4em;">
           浏览器可观测环境一路推送 <code style="color:var(--accent-cyan);font-family:var(--font-mono);">disruption / info_drop / constraint_update</code>。
-          多智能体从<b style="color:var(--text-primary);">离线打分升级为对动态世界的连续决策</b>。
+          多智能体从<b style="color:var(--text-primary);">"拿一份死数据打分"升级为"在一个会变的世界里做决策"</b>。
           replay 路演 + record 录制双模,L1/L2/L3 安全网兜底。
         </p>
       </div>
@@ -444,10 +584,10 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
 
     <!-- 一句话总结 -->
     <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size); text-align:center;">
-      → 一份 YAML 同时承载这三件事:agents 不靠聊天,只读这份契约。
+      → 一份 YAML 同时承载这三件事:智能体不靠聊天,只读这份契约。
     </p>
   </div>
-  <div class="chrome"><span>HOW IT WORKS</span><span>04 / 12</span></div>
+  <div class="chrome"><span>HOW IT WORKS</span><span>04 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 5 · DEMO (code) ════════ -->
@@ -456,8 +596,9 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
     <div class="eyebrow reveal"><span class="dot">◆</span> LIVE DEMO · 契约即代码</div>
     <h2 class="reveal" style="margin-bottom:var(--content-gap);">一份 YAML,<span class="gradient-text">定义"好计划"。</span></h2>
     <div class="split">
-      <div class="code-win reveal">
-        <div class="bar"><i></i><i></i><i></i><span class="fn">travel-sequence-v1.yaml</span></div>
+      <div class="reveal" style="display:flex; flex-direction:column; gap:clamp(0.5rem, 1.1vw, 0.85rem);">
+        <div class="code-win">
+          <div class="bar"><i></i><i></i><i></i><span class="fn">travel-sequence-v1.yaml</span></div>
 <pre><span class="c"># 好计划的可执行定义</span>
 <span class="k">artifact_family</span>: <span class="s">sequence</span>
 <span class="k">fields</span>: [time_block, action, cost, source_trust]
@@ -467,36 +608,101 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
   - <span class="n">id</span>: <span class="s">continuity</span>       <span class="c"># 相邻 transit</span>
 <span class="k">rubric</span>: [cost_fit, source_trust, dining_fit]
 <span class="k">calibration</span>: { metric: <span class="s">kendall_tau</span> }</pre>
+        </div>
+        <div class="code-win">
+          <div class="bar"><i></i><i></i><i></i><span class="fn">契约发现的 3 个问题</span></div>
+<pre><span class="c"># 同一份契约,3 条硬约束触发 3 处违规</span>
+<span class="k">time_budget</span>   <span class="c">— 行程超 960 分钟</span>
+<span class="k">state_mutex</span>   <span class="c">— hiking 与 luggage_drop 冲突</span>
+<span class="k">continuity</span>    <span class="c">— 相邻节点无 transit
+
+→</span> <span class="s">3 轮迭代后分数一直涨 ✓</span></pre>
+        </div>
       </div>
-      <div class="reveal">
-        <h3 style="margin-bottom:var(--element-gap);">真实 bug,被确定性抓出</h3>
-        <ul class="bullet-list">
-          <li><span><b>time_budget</b> —— 行程超 960 分钟</span></li>
-          <li><span><b>state_mutex</b> —— hiking 与 luggage_drop 冲突</span></li>
-          <li><span><b>continuity</b> —— 相邻节点无 transit</span></li>
-        </ul>
-        <p style="margin-top:var(--element-gap); color:var(--accent-cyan); font-family:var(--font-mono); font-size:var(--small-size);">→ 3 轮迭代后分数单调上升 ✓</p>
+      <div class="reveal trip-cycle" data-cycle="hk-3day">
+        <!-- buggy:2 节点 + 3 红 chip 夹中间 -->
+        <div class="trip-card trip-before">
+          <div class="bar"><span class="fn">Day 1 上午 · 香港 · 原始版</span></div>
+          <div class="body">
+            <div class="trip-row">
+              <span class="t">08:00–08:30</span><span class="ic">🍳</span>
+              <span class="a">早餐 茶餐厅 + 寄存行李</span>
+              <span class="cost">¥50</span>
+            </div>
+            <div class="trip-row chip-row">
+              <span class="chips">
+                <span class="chip chip-bad">continuity ✗</span>
+                <span class="chip chip-bad">state_mutex ✗</span>
+                <span class="chip chip-bad">no_duplicate_state ✗</span>
+              </span>
+            </div>
+            <div class="trip-row">
+              <span class="t">08:30–11:30</span><span class="ic">🥾</span>
+              <span class="a">龙脊徒步精华段</span>
+              <span class="cost">¥0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- golden:5 节点(中间 3 个 transit/switch 滑入)+ 3 绿 chip -->
+        <div class="trip-card trip-after">
+          <div class="bar"><span class="fn">Day 1 上午 · 香港 · 修复版</span></div>
+          <div class="body">
+            <div class="trip-row">
+              <span class="t">08:00–08:30</span><span class="ic">🍳</span>
+              <span class="a">早餐 茶餐厅</span>
+              <span class="cost">¥50</span>
+            </div>
+            <div class="trip-row is-inserting" style="--d:0.05s">
+              <span class="t">08:30–09:00</span><span class="ic">🚇</span>
+              <span class="a">港铁至筲箕湾</span>
+              <span class="cost">¥15</span>
+            </div>
+            <div class="trip-row is-inserting" style="--d:0.18s">
+              <span class="t">09:00–09:15</span><span class="ic">🔄</span>
+              <span class="a">A2 出口 → 9 号巴士</span>
+              <span class="cost">¥0</span>
+            </div>
+            <div class="trip-row is-inserting" style="--d:0.31s">
+              <span class="t">09:15–09:30</span><span class="ic">🚌</span>
+              <span class="a">9 号巴士至土地湾</span>
+              <span class="cost">¥6</span>
+            </div>
+            <div class="trip-row">
+              <span class="t">09:30–11:30</span><span class="ic">🥾</span>
+              <span class="a">龙脊徒步精华段</span>
+              <span class="cost">¥0</span>
+            </div>
+            <div class="trip-row chip-row">
+              <span class="chips">
+                <span class="chip chip-good">continuity ✓</span>
+                <span class="chip chip-good">state_mutex ✓</span>
+                <span class="chip chip-good">no_duplicate_state ✓</span>
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="chrome"><span>DEMO</span><span>05 / 12</span></div>
+  <div class="chrome"><span>DEMO</span><span>05 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 6 · TECH STACK ════════ -->
 <section class="slide" data-title="技术栈">
   <div class="slide-content">
     <div class="eyebrow reveal"><span class="dot">◆</span> TECH · 零新增依赖,纯 additive</div>
-    <h2 class="reveal" style="margin-bottom:var(--content-gap);">工程过硬,<span class="gradient-text">不是 demo-ware。</span></h2>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">工程过硬,<span class="gradient-text">不是花架子。</span></h2>
     <div class="grid reveal">
       <div class="card"><div class="num">LANG</div><h3>TypeScript · ESM</h3><p>zod ^3.22 契约 schema + discriminatedUnion</p></div>
       <div class="card"><div class="num">LLM</div><h3>Vercel AI SDK</h3><p>OpenAI 兼容 · DeepSeek/vLLM 均可 · 快慢分层</p></div>
       <div class="card"><div class="num">STORE</div><h3>better-sqlite3</h3><p>5 表 + migration · :memory: 测试便利</p></div>
       <div class="card"><div class="num">LIVE</div><h3>Live Env 双模</h3><p>replay 路演 + record 录制 · L1/L2/L3 安全网</p></div>
-      <div class="card"><div class="num">MCP</div><h3>JSON-RPC server</h3><p>契约作为工具暴露给外部 agent</p></div>
+      <div class="card"><div class="num">MCP</div><h3>JSON-RPC server</h3><p>契约作为工具暴露给外部智能体</p></div>
       <div class="card"><div class="num">TEST</div><h3>vitest 602</h3><p>全绿 · typecheck clean · 零越界</p></div>
     </div>
   </div>
-  <div class="chrome"><span>TECH</span><span>06 / 12</span></div>
+  <div class="chrome"><span>TECH</span><span>06 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 7 · APPLICATIONS ════════ -->
@@ -506,26 +712,82 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
     <h2 class="reveal" style="margin-bottom:var(--content-gap);">新增场景 = <span class="gradient-text">写一份契约</span>,不是写一个系统。</h2>
     <div class="grid reveal" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));">
       <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>旅行行程</h3><p>sequence 族 · 3 bug 抓出</p></div>
-      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>竞品情报表</h3><p>table 族 · 跨族探针 GO</p></div>
-      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>财务尽调</h3><p>financial 族 · P4.3</p></div>
-      <div class="card"><div class="num">DSL</div><h3>brief / roster</h3><p>契约已支持,fixture 待补</p></div>
+      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>竞品情报表</h3><p>table 族 · 跨族验证通过</p></div>
+      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>财务尽调</h3><p>financial 族 · 已跑通</p></div>
+      <div class="card"><div class="num">DSL</div><h3>简报 / 排班</h3><p>契约写好了,等测试数据</p></div>
     </div>
     <p class="reveal" style="margin-top:var(--content-gap);">三条使用路径:<span class="tag" style="font-size:var(--small-size);">env:demo 路演</span> <span class="tag m" style="font-size:var(--small-size);">env:record 录制</span> <span class="tag" style="font-size:var(--small-size);">mcp:serve 集成</span></p>
   </div>
-  <div class="chrome"><span>APPS</span><span>07 / 12</span></div>
+  <div class="chrome"><span>APPS</span><span>07 / 13</span></div>
+</section>
+
+<!-- ════════ SLIDE 8 · APPLICATIONS · OUTPUT ════════ -->
+<section class="slide" data-title="三族真实输出">
+  <div class="slide-content" style="gap:clamp(0.5rem, 1.2vw, 1rem);">
+    <div class="eyebrow reveal"><span class="dot">◆</span> APPLICATIONS · 跨族兑现</div>
+    <h2 class="reveal">同一引擎,<span class="gradient-text">三族真实输出。</span></h2>
+
+    <div class="apps-grid reveal">
+      <!-- 左:financial 全过程,打字机(跨两行) -->
+      <div class="code-win span2">
+        <div class="bar"><i></i><i></i><i></i><span class="fn">$ npm run dd:financial</span></div>
+<pre class="tw-cursor" data-typewriter="apps-output"></pre>
+      </div>
+
+      <!-- 右上:黄金集覆盖率审计(静态) -->
+      <div class="code-win">
+        <div class="bar"><i></i><i></i><i></i><span class="fn">$ npm run audit:golden</span></div>
+<pre><span class="c"># 黄金集覆盖率 · 37 工件 (25 cal + 12 det)</span>
+
+<span class="c"># family × quality_tier (calibration)</span>
+  <span class="s">✓</span> sequence/high: 4   <span class="s">✓</span> table/high: 3   <span class="s">✓</span> financial/high: 2
+  <span class="s">✓</span> sequence/mid:  3   <span class="s">✓</span> table/mid:  3   <span class="s">✓</span> financial/mid:  2
+  <span class="s">✓</span> sequence/low:  3   <span class="s">✓</span> table/low:  3   <span class="s">✓</span> financial/low:  2
+
+<span class="c"># violation pattern (detection, 每个应 ≥ 1)</span>
+  <span class="s">✓</span> time_budget   <span class="s">✓</span> state_mutex     <span class="s">✓</span> duplicate_state
+  <span class="s">✓</span> continuity    <span class="s">✓</span> missing_source  <span class="s">✓</span> pricing_format
+  <span class="s">✓</span> duplicate_competitor   <span class="s">✓</span> tax_ratio_low
+  <span class="s">✓</span> cashflow_anomaly       <span class="s">✓</span> related_party_transfer
+
+<span style="color:#34d399">✓ 无缺口,覆盖率矩阵满足。</span></pre>
+      </div>
+
+      <!-- 右下:三族契约 DSL(静态) -->
+      <div class="code-win">
+        <div class="bar"><i></i><i></i><i></i><span class="fn">contracts/*.yaml</span></div>
+<pre><span class="c"># travel-sequence-v1.yaml</span>
+<span class="k">artifact_family</span>: <span class="s">sequence</span>
+<span class="k">hard_constraints</span>: time_budget · state_mutex · continuity
+
+<span class="c"># intel-table-v1.yaml</span>
+<span class="k">artifact_family</span>: <span class="s">table</span>
+<span class="k">hard_constraints</span>: no_empty_source · pricing_format
+                  no_duplicate · source_trust_floor
+
+<span class="c"># financial-v1.yaml</span>
+<span class="k">artifact_family</span>: <span class="s">financial</span>
+<span class="k">hard_constraints</span>: tax_ratio_floor · cashflow_anomaly
+                  related_party_transfer · ratio_breach
+
+<span class="c">→ 三族零改代码复用,新增场景只写 YAML</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="chrome"><span>APPS · OUTPUT</span><span>08 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 8 · MOAT ════════ -->
 <section class="slide" data-title="护城河">
   <div class="slide-content">
     <div class="eyebrow reveal"><span class="dot">◆</span> WHY US · 护城河</div>
-    <h2 class="reveal" style="margin-bottom:var(--content-gap);">不做又一个 agent 框架,<span class="gradient-text">做协调的事实层。</span></h2>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">不做又一个 智能体框架,<span class="gradient-text">做协调的事实层。</span></h2>
     <div class="split">
       <ul class="bullet-list reveal">
         <li><span><b>可执行契约作为协调事实层</b> —— 目前无直接竞品</span></li>
         <li><span><b>组合难复制</b> —— DSL + Kendall τ 校准 + 契约自演化 + Live Env + 快慢分层</span></li>
         <li><span><b>契约自演化闭环</b> —— novel state 自动提议约束 → A/B 验证 → promote</span></li>
-        <li><span><b>不绑框架</b> —— 永久 adapter,默认 SimpleAgent,Mastra 可选</span></li>
+        <li><span><b>不绑框架</b> —— 永久适配层,默认简易智能体,Mastra 可选</span></li>
       </ul>
       <div class="reveal card" style="border-color:rgba(34,227,255,0.4); text-align:center;">
         <div class="stat-row" style="justify-content:center;">
@@ -536,38 +798,53 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
       </div>
     </div>
   </div>
-  <div class="chrome"><span>MOAT</span><span>08 / 12</span></div>
+  <div class="chrome"><span>MOAT</span><span>09 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 9 · TRACTION / DATA ════════ -->
 <section class="slide" data-title="数据">
-  <div class="slide-content" style="align-items:center; text-align:center;">
+  <div class="slide-content" style="align-items:center; text-align:center; gap:clamp(0.5rem, 1.2vw, 1rem);">
     <div class="eyebrow reveal" style="text-align:center;"><span class="dot">◆</span> TRACTION · 可验证,非感觉</div>
-    <h2 class="reveal" style="margin-bottom:var(--content-gap);">不是 PPT,<span class="gradient-text">是可运行的工程。</span></h2>
-    <div class="stat-row reveal" style="justify-content:center; margin-bottom:var(--content-gap);">
+    <h2 class="reveal">不是 PPT,<span class="gradient-text">是可运行的工程。</span></h2>
+    <div class="stat-row reveal" style="justify-content:center;">
       <div class="stat"><div class="v">602</div><div class="l">测试全绿</div></div>
       <div class="stat"><div class="v">5</div><div class="l">契约族</div></div>
       <div class="stat"><div class="v">0.64</div><div class="l">judge Kendall τ</div></div>
       <div class="stat"><div class="v">0</div><div class="l">新增依赖</div></div>
     </div>
-    <p class="reveal" style="max-width:58ch;">bug 抓出率 travel/intel 各 3/3 · 路演 demo <span style="color:var(--accent-cyan); font-family:var(--font-mono);">npm run env:demo</span> 实测起服务 · 27 个 plan 提交全程 TDD</p>
+    <p class="reveal" style="max-width:64ch;">
+      <span style="color:var(--accent-cyan); font-family:var(--font-mono);">npm run demo:html</span> 一键产出全链路报告:契约 → 抓 bug → 人工审批 → 版本对比 → 跨族验证 · 全程可回放
+    </p>
+    <div class="video-reveal" data-autoplay-on-visible style="
+      margin-top:clamp(0.4rem, 1.2vw, 1.1rem);
+      width:min(640px, 84vw);
+      aspect-ratio:16/9;
+      border-radius:clamp(8px, 1vw, 14px);
+      overflow:hidden;
+      border:1px solid rgba(255,62,165,0.35);
+      box-shadow:0 0 24px var(--accent-glow-m), 0 0 48px var(--accent-glow-c);
+    ">
+      <video src="assets/crucible-contract-outer-loop.webm"
+             muted loop playsinline preload="auto"
+             style="display:block; width:100%; height:100%; object-fit:cover;"></video>
+    </div>
   </div>
-  <div class="chrome"><span>TRACTION</span><span>09 / 12</span></div>
+  <div class="chrome"><span>TRACTION</span><span>10 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 10 · ROADMAP ════════ -->
 <section class="slide" data-title="路线图">
   <div class="slide-content">
-    <div class="eyebrow reveal"><span class="dot">◆</span> ROADMAP · 从项目到协议</div>
-    <h2 class="reveal" style="margin-bottom:var(--content-gap);">下一步:<span class="gradient-text">冻结 v1.0,找 adopter。</span></h2>
+    <div class="eyebrow reveal"><span class="dot">◆</span> ROADMAP · 从内部项目到外部协议</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">下一步:<span class="gradient-text">冻结 v1.0,把门打开让人接。</span></h2>
     <div class="grid reveal" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));">
-      <div class="card"><div class="num">NOW · ICE 10.0</div><h3>冻结 v1.0 契约标准</h3><p>Effort 低 / Confidence 高 —— 从项目变成协议</p></div>
-      <div class="card"><div class="num">NEXT · 北极星</div><h3>1 个外部 adopter</h3><p>让真实团队挂载契约跑他们的多 agent 任务</p></div>
-      <div class="card"><div class="num">THEN</div><h3>契约自演化去 Human Gate</h3><p>A/B 验证后自动 promote · OQ-TIER 升级</p></div>
+      <div class="card"><div class="num">NOW · 当前</div><h3>项目 → 协议:冻结 v1.0 契约</h3><p>先把接口定死。做减法,不做加法 —— 东西稳了,别人才敢接。</p></div>
+      <div class="card"><div class="num">NEXT · 北极星</div><h3>演示 → 验证:找一个外部团队真用</h3><p>自己跑一万遍不如别人跑一遍。一个外部团队拿着契约跑通他们自己的任务,才算数。</p></div>
+      <div class="card"><div class="num">THEN</div><h3>人审 → 自演化:契约自己长</h3><p>新老契约并跑,谁表现好谁留下。人不再拍板,契约靠数据自己迭代。</p></div>
     </div>
-    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">→ 10x 不在加功能,在一个外部团队用契约跑通真实任务</p>
+    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">下一个里程碑:一家外部团队照着这套规则,跑通他们自己的真实任务。</p>
   </div>
-  <div class="chrome"><span>ROADMAP</span><span>10 / 12</span></div>
+  <div class="chrome"><span>ROADMAP</span><span>11 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 11 · ANTI-GOAL ════════ -->
@@ -577,12 +854,12 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
     <h2 class="reveal" style="margin-bottom:var(--content-gap);">克制,就是<span class="gradient-text">护城河的一部分。</span></h2>
     <ul class="bullet-list reveal" style="max-width:62ch;">
       <li><span><b>不靠聊天协调</b> —— 这是核心反目标,也是护城河</span></li>
-      <li><span><b>不做又一个 agent 框架</b> —— 不和 Mastra/LangGraph 竞争编排,做它们缺的事实层</span></li>
-      <li><span><b>不 fork / 不强绑</b> —— 永久 adapter,引擎可独立开源(AGPL 引擎 + 私有契约 ToB)</span></li>
-      <li><span><b>不做通用 LLM 应用</b> —— 聚焦"有可执行标准的合成类任务"</span></li>
+      <li><span><b>不做又一个 智能体框架</b> —— 不和 Mastra/LangGraph 抢编排的活,补它们缺的那一环:可验证的输出</span></li>
+      <li><span><b>不 fork / 不强绑</b> —— 永久适配层,引擎可独立开源(AGPL 开源引擎 + 私有契约商用)</span></li>
+      <li><span><b>不做通用 LLM 应用</b> —— 聚焦"能用规则检验的任务"</span></li>
     </ul>
   </div>
-  <div class="chrome"><span>ANTI-GOAL</span><span>11 / 12</span></div>
+  <div class="chrome"><span>ANTI-GOAL</span><span>12 / 13</span></div>
 </section>
 
 <!-- ════════ SLIDE 12 · CLOSING ════════ -->
@@ -595,9 +872,9 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
       <span class="tag">npm run env:demo</span>
       <span class="tag m">crucible-dev worktree</span>
     </div>
-    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">602 tests green · typecheck clean · zero new deps</p>
+    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">602 测试全绿 · 类型检查通过 · 零新增依赖</p>
   </div>
-  <div class="chrome"><span>THANK YOU</span><span>12 / 12</span></div>
+  <div class="chrome"><span>THANK YOU</span><span>13 / 13</span></div>
 </section>
 
 <script>
@@ -606,6 +883,177 @@ p, li { font-size: var(--body-size); color: var(--text-secondary); }
    keyboard + wheel + touch navigation, progress, nav dots,
    Intersection Observer reveal triggers
    ============================================================ */
+
+/* ── Typewriter sources (Slide 8 财务尽调真实输出,从 npm run dd:financial 摘选)──
+   每行约 90ms 揭示,4 个公司 × 4 行 = 16 行 ≈ 1.4s 完成。
+   红旗 emoji + 颜色高亮通过 inline <span class="…"> 实现,与 code-win 风格一致。 */
+/* ── Slide 8 主舞台多场景轮播数据源 ──
+   每个 key 是场景数组 [{title, lines}],按顺序播,全部播完后从头无限循环。
+   - title 同步更新 .code-win .bar .fn 文本(终端命令名)
+   - lines 是多行字符串(用 join('\n') 拼),tick 每 110ms 揭示一行
+   - 每场景播完后停 1.5s 让观众读,fade 400ms 后切下一个 */
+const TYPEWRITER_SOURCES = {
+  'apps-output': [
+    // ── 场景 1:财务尽调红旗(dd:financial) ───────────────────────
+    {
+      title: '$ npm run dd:financial',
+      lines: [
+        '<span class="c"># 4 份合成档案 · 4 种触发模式</span>',
+        '',
+        '<span class="n">[合成-干净]</span> SampleCo Ltd <span class="c">(audited)</span>',
+        '  红旗: <span class="s">0</span>  |  det=<span class="s">0.650</span>  source_trust=<span class="s">0.95</span>',
+        '  <span style="color:#34d399">✓ 无红旗(干净档案)</span>',
+        '',
+        '<span class="n">[合成-偷漏税]</span> SampleCo Ltd <span class="c">(reviewed)</span>',
+        '  红旗: <span class="k">1</span>  |  det=<span class="k">0.482</span>  source_trust=<span class="s">0.70</span>',
+        '  <span class="k">🚩 tax_ratio_floor</span>: 有效税率 3.0% &lt; 10% 行业下限',
+        '',
+        '<span class="n">[合成-现金流]</span> SampleCo Ltd <span class="c">(audited)</span>',
+        '  红旗: <span class="k">1</span>  |  det=<span class="k">0.552</span>  source_trust=<span class="s">0.95</span>',
+        '  <span class="k">🚩 cashflow_anomaly</span>: 经营现金流/净利润 = 0.22 &lt; 0.5',
+        '',
+        '<span class="n">[合成-关联方]</span> SampleCo Ltd <span class="c">(reviewed)</span>',
+        '  红旗: <span class="k">1</span>  |  det=<span class="k">0.366</span>  source_trust=<span class="k">0.50</span>',
+        '  <span class="k">🚩 related_party_transfer</span>: 关联方收入占比 45% &gt; 30%',
+      ].join('\n'),
+    },
+    // ── 场景 2:竞品 5 维评分 + 排名(intel:monitor) ──────────────
+    {
+      title: '$ npm run intel:monitor',
+      lines: [
+        '<span class="c"># 契约:intel-table-v1.1 · 5 谓词 + 4 det rubric + 1 judge</span>',
+        '',
+        '<span class="n">[合成-buggy]</span> 5 行竞品',
+        '  硬违规: <span class="k">3</span>  软违规: <span class="k">1</span>  det=<span class="k">0.363</span>  final=<span class="k">0.538</span>',
+        '    coverage               = <span class="s">0.800</span>',
+        '    source_trust           = <span class="s">0.620</span>',
+        '    differentiator_density = <span class="s">0.400</span>',
+        '    strategic_insight      = <span class="s">0.800</span> <span class="c">[judge]</span>',
+        '  <span class="k">⚠ 命中违规:</span>',
+        '     <span class="k">🚩 no_empty_source</span>: row 2 source 空',
+        '     <span class="k">🚩 pricing_format</span>: row 3 pricing="未知"',
+        '     <span class="k">🚩 no_duplicate_competitor</span>: "CompetitorA" 重复',
+        '     <span style="color:#fbbf24">◇ source_trust_floor</span>: row 2 trust=0.3 &lt; 0.4',
+        '',
+        '<span class="c"># 总分排名(final = det × 0.6 + judge × 0.4)</span>',
+        '  1. <span class="n">公开-SaaS  </span>  final=<span class="s">0.861</span>',
+        '  2. <span class="n">公开-OSS   </span>  final=<span class="s">0.776</span>',
+        '  3. <span class="n">合成-golden</span>  final=<span class="s">0.770</span>',
+        '  4. <span class="n">合成-buggy </span>  final=<span class="k">0.538</span>',
+      ].join('\n'),
+    },
+    // ── 场景 3:MCP 协议集成(mcp:serve) ───────────────────────────
+    {
+      title: '$ npm run mcp:serve',
+      lines: [
+        '<span class="c"># Crucible MCP Server v0.2.0 · stdio JSON-RPC</span>',
+        '',
+        '<span class="k">→</span> initialize',
+        '<span class="s">←</span> {"serverInfo": "crucible-mcp", "protocolVersion": "2024-11-05"}',
+        '',
+        '<span class="k">→</span> tools/list',
+        '<span class="s">←</span> 5 tools:',
+        '   · <span class="n">score_artifact</span>     — 给契约 + 工件,返回分数',
+        '   · <span class="n">run_workflow</span>       — 跑完整迭代闭环',
+        '   · <span class="n">calibrate_judge</span>    — 校准 LLM judge 的 Kendall τ',
+        '   · <span class="n">evolve_contract</span>    — 从新颖工件提议契约修订',
+        '   · <span class="n">ab_compare</span>         — Champion-Challenger A/B',
+        '',
+        '<span class="k">→</span> tools/call score_artifact',
+        '<span class="s">←</span> {"final_score": <span class="k">0.538</span>, "violations": 3, "🚩": "missing_source"}',
+      ].join('\n'),
+    },
+  ],
+};
+
+function startTypewriter(el) {
+  const key = el.dataset.typewriter;
+  const scenes = TYPEWRITER_SOURCES[key];
+  if (!scenes) return;
+  if (el._twTimer) clearTimeout(el._twTimer);
+  // 缓存 .bar .fn 引用,用于场景切换时同步标题
+  const fnEl = el.closest('.code-win')?.querySelector('.bar .fn');
+
+  function playScene(idx) {
+    const scene = scenes[idx];
+    if (fnEl) fnEl.textContent = scene.title;  // 同步切终端命令标题
+    el.style.opacity = '';                     // 复位(若上一轮 fade 中)
+    el.style.transition = '';
+    el.innerHTML = '';
+    const lines = scene.lines.split('\n');
+    let i = 0;
+    function tick() {
+      if (i >= lines.length) {
+        // 一个场景播完:停 1500ms 阅读 → fade 400ms → 切下一个场景(循环)
+        el._twTimer = setTimeout(() => {
+          el.style.transition = 'opacity 0.4s';
+          el.style.opacity = '0';
+          el._twTimer = setTimeout(() => {
+            playScene((idx + 1) % scenes.length);
+          }, 400);
+        }, 1500);
+        return;
+      }
+      el.innerHTML += (i > 0 ? '\n' : '') + lines[i];
+      i++;
+      el._twTimer = setTimeout(tick, 110);
+    }
+    el._twTimer = setTimeout(tick, 700);  // 启动延迟,与 .reveal 入场对齐
+  }
+
+  playScene(0);
+}
+
+/* ── Slide 5 旅行 buggy↔golden 自动循环 ──
+   流程:before 显示 → 等 BEFORE_MS → fade 切到 after(after 内的 transit/switch 节点
+   按 CSS --d 错峰滑入)→ 等 AFTER_MS → fade 回 before,无限循环。
+   离开 slide 时:清掉所有 timer,把 active 复位到 before(下次回来从头讲)。 */
+function startTripCycle(root) {
+  if (root._cycleTimers) return;  // 已在跑,不重复启动
+  const before = root.querySelector('.trip-before');
+  const after  = root.querySelector('.trip-after');
+  if (!before || !after) return;
+  const BEFORE_MS = 3000;   // buggy 状态停留(给评委看 3 个红 chip)
+  const AFTER_MS  = 3400;   // golden 停留稍长(节点更多,要看完)
+  const FADE_MS   = 450;    // 与 .trip-card transition 同步
+  root._cycleTimers = [];
+  let showingBefore = true;
+  before.classList.add('is-active');
+  function flip() {
+    if (showingBefore) {
+      before.classList.remove('is-active');
+      // 等 fade-out 再切到 after(同步透明度,避免重叠闪烁)
+      root._cycleTimers.push(setTimeout(() => {
+        // 重置 after 的 is-inserting 动画:remove → reflow → add,触发 keyframes 重放
+        const inserts = after.querySelectorAll('.is-inserting');
+        inserts.forEach(el => { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; });
+        after.classList.add('is-active');
+        showingBefore = false;
+        root._cycleTimers.push(setTimeout(flip, AFTER_MS));
+      }, FADE_MS));
+    } else {
+      after.classList.remove('is-active');
+      root._cycleTimers.push(setTimeout(() => {
+        before.classList.add('is-active');
+        showingBefore = true;
+        root._cycleTimers.push(setTimeout(flip, BEFORE_MS));
+      }, FADE_MS));
+    }
+  }
+  root._cycleTimers.push(setTimeout(flip, BEFORE_MS));
+}
+
+function stopTripCycle(root) {
+  if (root._cycleTimers) {
+    root._cycleTimers.forEach(t => clearTimeout(t));
+    root._cycleTimers = null;
+  }
+  const before = root.querySelector('.trip-before');
+  const after  = root.querySelector('.trip-after');
+  if (before) before.classList.remove('is-active');
+  if (after)  after.classList.remove('is-active');
+}
+
 class SlidePresentation {
   constructor() {
     this.slides = Array.from(document.querySelectorAll('.slide'));
@@ -636,6 +1084,14 @@ class SlidePresentation {
         this.currentIndex = i;
         this.updateNavDots();
         this.updateProgress();
+        // 首屏就停在带视频的 slide(F5 直接落在 #3)时,也触发播放。
+        this.slides[i].querySelectorAll('[data-autoplay-on-visible] video').forEach(v => {
+          try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {}
+        });
+        // 首屏停在 Slide 8(三族输出)时启动打字机
+        this.slides[i].querySelectorAll('[data-typewriter]').forEach(el => startTypewriter(el));
+        // 首屏停在 Slide 5(旅行循环)时启动 trip cycle
+        this.slides[i].querySelectorAll('[data-cycle]').forEach(el => startTripCycle(el));
         return;
       }
     }
@@ -661,9 +1117,37 @@ class SlidePresentation {
           entry.target.classList.add('visible');
           const idx = this.slides.indexOf(entry.target);
           if (idx !== -1) { this.currentIndex = idx; this.updateNavDots(); this.updateProgress(); }
+          // 视频登场:翻到这一页时,所有带 data-autoplay-on-visible 的 video 重置到 0s 并播放,
+          // 与 .video-reveal 的 0.6s 入场延迟对齐 —— 视频清晰落位的同时开始播。
+          entry.target.querySelectorAll('[data-autoplay-on-visible] video').forEach(v => {
+            try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {}
+          });
+          // 打字机登场:翻到带 data-typewriter 的 slide 时,从头逐行揭示。
+          entry.target.querySelectorAll('[data-typewriter]').forEach(el => startTypewriter(el));
+          // 旅行循环登场:翻到 Slide 5 时启动 buggy↔golden 循环
+          entry.target.querySelectorAll('[data-cycle]').forEach(el => startTripCycle(el));
+        } else if (!entry.isIntersecting) {
+          // 离开视野:暂停,省资源 + 保证下次回来从头放。
+          entry.target.querySelectorAll('[data-autoplay-on-visible] video').forEach(v => {
+            try { v.pause(); } catch (_) {}
+          });
+          // 离开时清空打字机,下次入场重新开始
+          entry.target.querySelectorAll('[data-typewriter]').forEach(el => {
+            el.innerHTML = '';
+            if (el._twTimer) clearTimeout(el._twTimer);
+            // 清掉 fade 中可能残留的 inline opacity / transition,下次入场不会"开局透明"
+            el.style.opacity = '';
+            el.style.transition = '';
+            // 复位标题到第一个场景,下次入场永远从场景 0 开始
+            const scenes = TYPEWRITER_SOURCES[el.dataset.typewriter];
+            const fnEl = el.closest('.code-win')?.querySelector('.bar .fn');
+            if (scenes && fnEl && scenes[0]?.title) fnEl.textContent = scenes[0].title;
+          });
+          // 离开时停旅行循环,复位到 before
+          entry.target.querySelectorAll('[data-cycle]').forEach(el => stopTripCycle(el));
         }
       });
-    }, { threshold: [0.55, 0.75] });
+    }, { threshold: [0, 0.55, 0.75] });
     this.slides.forEach((s) => obs.observe(s));
   }
 
