@@ -20,7 +20,8 @@ import type { Contract } from '../contract/schema.js';
 import type { ScoreReport } from '../scorer/types.js';
 import type { Actor } from '../auth/rbac.js';
 import { SYSTEM_ACTOR } from '../auth/rbac.js';
-import { insertContract, insertScoreRun } from './repositories.js';
+import { insertContract, insertScoreRun, insertEnvEvent, markEnvEventApplied } from './repositories.js';
+import type { LiveEnvEvent } from '../env/types.js';
 
 type ContractWithMeta = Contract & { metadata?: { version?: unknown } };
 
@@ -67,4 +68,28 @@ export function persistScoreRun(
     diff_summary: null,
   });
   insertScoreRun(db, artifact, version, report, actor.id);
+}
+
+// ───────────────────── Live Env v1: env_events sink ─────────────────────
+// spec ref: 2026-06-30-crucible-live-env-design.md §7.3
+
+/**
+ * 把一个 env 事件落库(applied=0)。publish 时调用。
+ * runId 串起整条轨迹(同一次 startLiveEnv 共享)。
+ */
+export function persistEnvEvent(
+  db: DB,
+  event: LiveEnvEvent,
+  runId: string,
+  actor: Actor = SYSTEM_ACTOR
+): void {
+  insertEnvEvent(db, event, runId, actor.id);
+}
+
+/**
+ * consume 真折叠后回填 applied=1 + applied_iter。
+ * 审计能看到"环境吐过、但被忽略"的事件(MIRA 论文未做到这一层)。
+ */
+export function markApplied(db: DB, eventId: string, iterIndex: number): void {
+  markEnvEventApplied(db, eventId, iterIndex);
 }

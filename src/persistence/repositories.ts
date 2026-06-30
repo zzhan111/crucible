@@ -304,3 +304,54 @@ export function listActivityLog(db: DB, opts: ActivityLogOptions = {}): Activity
   all.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   return all.slice(0, limit);
 }
+
+// ───────────────────── env_events (Live Env v1) ─────────────────────
+
+import type { LiveEnvEvent } from '../env/types.js';
+
+export interface EnvEventRow {
+  id: string;
+  run_id: string;
+  scenario: string;
+  kind: string;
+  emitted_by: string;
+  t_offset_ms: number;
+  payload_json: string;
+  applied: number;
+  applied_iter: number | null;
+  actor_id: string | null;
+  created_at: string;
+}
+
+export function insertEnvEvent(
+  db: DB,
+  event: LiveEnvEvent,
+  runId: string,
+  actorId: string = 'system'
+): void {
+  // payload = 整个 event 减 envelope 的非 payload 字段已在 event 里;直接存整个 event JSON
+  db.prepare(
+    `INSERT INTO env_events (id, run_id, scenario, kind, emitted_by, t_offset_ms, payload_json, applied, applied_iter, actor_id, created_at)
+     VALUES (@id, @run, @scn, @kind, @emit, @t, @payload, 0, NULL, @actor, datetime('now'))`
+  ).run({
+    id: event.id,
+    run: runId,
+    scn: event.scenario,
+    kind: event.kind,
+    emit: event.emitted_by,
+    t: event.t_offset_ms,
+    payload: JSON.stringify(event),
+    actor: actorId,
+  });
+}
+
+export function markEnvEventApplied(db: DB, eventId: string, iterIndex: number): void {
+  db.prepare('UPDATE env_events SET applied = 1, applied_iter = ? WHERE id = ?')
+    .run(iterIndex, eventId);
+}
+
+export function listEnvEvents(db: DB, runId: string): EnvEventRow[] {
+  return db.prepare(
+    'SELECT id, run_id, scenario, kind, emitted_by, t_offset_ms, payload_json, applied, applied_iter, actor_id, created_at FROM env_events WHERE run_id = ? ORDER BY t_offset_ms ASC'
+  ).all(runId) as EnvEventRow[];
+}
