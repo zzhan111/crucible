@@ -109,3 +109,10 @@ coverage/
 
 # Portable distribution archive (build artifact, regenerable via scripts/pack-portable.sh)
 crucible-portable-*.tar.gz
+
+# Demo screen recordings (binary, use external link / git-lfs instead)
+docs/assets/*.webm
+docs/assets/*.mp4
+
+# Pitch deck (local-only, not for GitHub)
+docs/crucible-pitch-deck.html
