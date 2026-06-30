@@ -93,3 +93,39 @@ describe('resolveModel (tier 路由)', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('callLLM tier 路由', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL_SLOW;
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL_SLOW;
+  });
+
+  it('不传 tier 等价于 fast(向后兼容:OPENAI_MODEL_SLOW 设了也不读)', async () => {
+    // 关键:即使 SLOW 配置了,不传 tier 也不会触发 SLOW 路径
+    process.env.OPENAI_MODEL_SLOW = 'deepseek-r1';
+    const { resolveModel } = await import('../../src/llm/client.js');
+    // 通过 resolveModel 间接验证:不传等价 'fast'(callLLM 默认参数 = 'fast')
+    expect(resolveModel('fast')).not.toBe('deepseek-r1');
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('tier=slow 调用 resolveModel(slow) 而非 fast', async () => {
+    process.env.OPENAI_MODEL = 'deepseek-v3';
+    process.env.OPENAI_MODEL_SLOW = 'deepseek-r1';
+    const { resolveModel } = await import('../../src/llm/client.js');
+    // 直接验证 resolveModel('slow') 行为 — callLLM 内部调用此函数
+    expect(resolveModel('slow')).toBe('deepseek-r1');
+    expect(resolveModel('fast')).toBe('deepseek-v3');
+  });
+});

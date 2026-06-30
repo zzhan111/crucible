@@ -37,8 +37,11 @@ export function hasApiKey(): boolean {
  * 支持任意 OpenAI 格式 endpoint(OpenAI 官方 / Azure / vLLM / 火山方舟等)。
  * 无 API key 时返回 null + 警告(降级模式)。
  * 出错时返回 null + 警告,不 crash workflow。
+ *
+ * tier:'fast'(默认,向后兼容)/ 'slow'(影响半径大的调用走慢脑)。
+ * 见 src/llm/client.ts::resolveModel 与 spec 2026-06-30-llm-tier-routing-design.md。
  */
-export async function callLLM(prompt: string): Promise<string | null> {
+export async function callLLM(prompt: string, tier: ModelTier = 'fast'): Promise<string | null> {
   if (!hasApiKey()) {
     console.warn('[LLM] OPENAI_API_KEY missing, judge will use neutral 0.5');
     return null;
@@ -48,7 +51,7 @@ export async function callLLM(prompt: string): Promise<string | null> {
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     });
-    const model = process.env.OPENAI_MODEL || 'gpt-4o';
+    const model = resolveModel(tier);
     // 用 .chat() 而非默认的 .responses()(新版 API),
     // 第三方兼容服务只支持 /chat/completions,用 .responses() 会 404。
     // 注: reasoning models(如 deepseek-v4-flash)不支持 temperature,
@@ -96,13 +99,15 @@ export function parseLLMJson(text: string): Record<string, unknown> | null {
  * - 传 temperature/seed(录制期需要,不影响 judge 的 callLLM)
  * - 解析返回文本为 JSON(parseLLMJson),失败返回 null
  * - 无 API key / 出错 → null(同 callLLM 降级模式)
+ * - tier:同 callLLM,默认 'fast';未来 LLM Event Source 等高影响半径调用走 'slow'。
  *
  * 注:reasoning model 可能不支持 temperature;调用方传了就传,SDK 会忽略或报错——
  * 报错走 catch 返回 null,不 crash。
  */
 export async function callLLMJson(
   prompt: string,
-  opts: LLMJsonOptions = {}
+  opts: LLMJsonOptions = {},
+  tier: ModelTier = 'fast'
 ): Promise<Record<string, unknown> | null> {
   if (!hasApiKey()) {
     console.warn('[LLM] OPENAI_API_KEY missing, callLLMJson returns null');
@@ -113,7 +118,7 @@ export async function callLLMJson(
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     });
-    const model = process.env.OPENAI_MODEL || 'gpt-4o';
+    const model = resolveModel(tier);
     const result = await generateText({
       model: openai.chat(model),
       ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
