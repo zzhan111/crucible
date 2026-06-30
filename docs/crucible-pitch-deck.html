@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crucible — 契约驱动合成引擎 · Hackathon Pitch</title>
+
+<!-- Fonts: Clash Display + Satoshi (Neon Cyber preset) via Fontshare -->
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=satoshi@400,500,700&display=swap" />
+
+<style>
+/* ============================================================
+   THEME (Neon Cyber) — change these to re-skin the whole deck
+   ============================================================ */
+:root {
+  --bg-primary: #070b18;
+  --bg-secondary: #0d1426;
+  --bg-card: rgba(20, 30, 56, 0.55);
+  --grid-line: rgba(80, 130, 200, 0.10);
+  --text-primary: #eaf2ff;
+  --text-secondary: #8fa3c8;
+  --text-dim: #5a6b8c;
+  --accent-cyan: #22e3ff;
+  --accent-magenta: #ff3ea5;
+  --accent-glow-c: rgba(34, 227, 255, 0.45);
+  --accent-glow-m: rgba(255, 62, 165, 0.40);
+
+  --font-display: "Clash Display", sans-serif;
+  --font-body: "Satoshi", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
+
+  --title-size: clamp(1.9rem, 5.4vw, 4.4rem);
+  --h2-size: clamp(1.25rem, 3.4vw, 2.4rem);
+  --h3-size: clamp(1rem, 2.3vw, 1.5rem);
+  --body-size: clamp(0.78rem, 1.45vw, 1.06rem);
+  --small-size: clamp(0.65rem, 1vw, 0.85rem);
+  --mono-size: clamp(0.62rem, 0.95vw, 0.8rem);
+
+  --slide-padding: clamp(1.2rem, 4vw, 4rem);
+  --content-gap: clamp(0.6rem, 2vw, 1.8rem);
+  --element-gap: clamp(0.3rem, 1vw, 0.9rem);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-normal: 0.6s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ============================================================
+   VIEWPORT FITTING: MANDATORY BASE (from STYLE_PRESETS.md)
+   ============================================================ */
+html, body { height: 100%; overflow-x: hidden; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--body-size);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-height: 100%;
+  overflow: hidden;
+  padding: var(--slide-padding);
+  position: relative;
+  z-index: 2;
+}
+
+/* Atmospheric grid + glow background, shared by all slides */
+.slide::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: clamp(28px, 4vw, 56px) clamp(28px, 4vw, 56px);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, #000 35%, transparent 78%);
+  z-index: 0;
+  pointer-events: none;
+}
+.slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(40vw 40vw at 82% 18%, var(--accent-glow-c), transparent 60%),
+    radial-gradient(36vw 36vw at 12% 88%, var(--accent-glow-m), transparent 62%);
+  opacity: 0.55;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.04; letter-spacing: -0.01em; }
+h1 { font-size: var(--title-size); }
+h2 { font-size: var(--h2-size); }
+h3 { font-size: var(--h3-size); font-weight: 600; }
+p, li { font-size: var(--body-size); color: var(--text-secondary); }
+.lead { color: var(--text-primary); }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: var(--element-gap);
+}
+.eyebrow .dot { color: var(--accent-magenta); }
+
+.gradient-text {
+  background: linear-gradient(100deg, var(--accent-cyan) 0%, #9db8ff 45%, var(--accent-magenta) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid rgba(120, 160, 220, 0.18);
+  border-radius: clamp(10px, 1.2vw, 16px);
+  padding: clamp(0.9rem, 1.8vw, 1.4rem);
+  backdrop-filter: blur(8px);
+  position: relative;
+  overflow: hidden;
+}
+.card h3 { color: var(--text-primary); margin-bottom: var(--element-gap); }
+.card .num {
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  color: var(--accent-magenta);
+  letter-spacing: 0.15em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: clamp(0.6rem, 1.4vw, 1.1rem);
+}
+
+.bullet-list { list-style: none; display: flex; flex-direction: column; gap: clamp(0.45rem, 1vh, 0.85rem); }
+.bullet-list li {
+  display: flex;
+  gap: 0.7em;
+  align-items: flex-start;
+  color: var(--text-secondary);
+}
+.bullet-list li::before {
+  content: "▸";
+  color: var(--accent-cyan);
+  flex-shrink: 0;
+  text-shadow: 0 0 8px var(--accent-glow-c);
+}
+.bullet-list li b { color: var(--text-primary); font-weight: 500; }
+
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  padding: 0.3em 0.8em;
+  border: 1px solid rgba(34, 227, 255, 0.4);
+  border-radius: 999px;
+  color: var(--accent-cyan);
+  background: rgba(34, 227, 255, 0.06);
+}
+.tag.m { border-color: rgba(255, 62, 165, 0.4); color: var(--accent-magenta); background: rgba(255, 62, 165, 0.06); }
+
+/* Stat block */
+.stat-row { display: flex; flex-wrap: wrap; gap: clamp(1rem, 4vw, 3rem); }
+.stat .v {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4.6vw, 3.4rem);
+  line-height: 1;
+  background: linear-gradient(120deg, var(--accent-cyan), var(--accent-magenta));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.stat .l { font-family: var(--font-mono); font-size: var(--mono-size); color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.3em; }
+
+/* Flow diagram (Scorer→Critic→Curator loop) */
+.flow { display: flex; align-items: stretch; gap: clamp(0.3rem, 1vw, 0.8rem); flex-wrap: wrap; }
+.flow .node {
+  flex: 1 1 0;
+  min-width: clamp(90px, 14vw, 150px);
+  border: 1px solid rgba(120, 160, 220, 0.25);
+  border-radius: clamp(8px, 1vw, 12px);
+  padding: clamp(0.6rem, 1.3vw, 1rem);
+  background: var(--bg-card);
+  text-align: center;
+}
+.flow .node .nm { font-family: var(--font-display); font-size: var(--h3-size); color: var(--text-primary); }
+.flow .node .ds { font-size: var(--small-size); color: var(--text-dim); margin-top: 0.2em; }
+.flow .arrow { display: flex; align-items: center; color: var(--accent-cyan); font-size: var(--h3-size); text-shadow: 0 0 8px var(--accent-glow-c); }
+
+/* Code window */
+.code-win {
+  background: #05080f;
+  border: 1px solid rgba(120, 160, 220, 0.2);
+  border-radius: clamp(8px, 1vw, 12px);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 1.6;
+}
+.code-win .bar { display: flex; gap: 6px; padding: 0.6em 0.9em; background: #0a0f1d; border-bottom: 1px solid rgba(120,160,220,0.15); }
+.code-win .bar i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.code-win .bar i:nth-child(1) { background: #ff5f57; }
+.code-win .bar i:nth-child(2) { background: #febc2e; }
+.code-win .bar i:nth-child(3) { background: #28c840; }
+.code-win .bar .fn { margin-left: auto; color: var(--text-dim); }
+.code-win pre { padding: clamp(0.7rem, 1.6vw, 1.2rem); color: var(--text-secondary); white-space: pre; overflow: hidden; }
+.code-win .k { color: var(--accent-magenta); }
+.code-win .s { color: var(--accent-cyan); }
+.code-win .c { color: var(--text-dim); }
+.code-win .n { color: #9db8ff; }
+
+/* Two-column split */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 3vw, 2.4rem); align-items: center; }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+/* Footer chrome */
+.chrome {
+  position: absolute;
+  bottom: clamp(0.6rem, 1.6vw, 1.2rem);
+  left: var(--slide-padding);
+  right: var(--slide-padding);
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  color: var(--text-dim);
+  z-index: 3;
+  letter-spacing: 0.1em;
+}
+
+/* Progress bar */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+  width: 0; z-index: 100;
+  box-shadow: 0 0 10px var(--accent-glow-c);
+  transition: width 0.3s var(--ease-out-expo);
+}
+
+/* Nav dots */
+.nav-dots {
+  position: fixed; right: clamp(0.6rem, 1.6vw, 1.4rem); top: 50%;
+  transform: translateY(-50%); display: flex; flex-direction: column; gap: 0.55rem; z-index: 100;
+}
+.nav-dots button {
+  width: 9px; height: 9px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(143, 163, 200, 0.3); padding: 0; transition: all 0.25s;
+}
+.nav-dots button.active { background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-glow-c); transform: scale(1.3); }
+
+/* ============================================================
+   REVEAL ANIMATIONS (Intersection Observer adds .visible)
+   ============================================================ */
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity var(--duration-normal) var(--ease-out-expo), transform var(--duration-normal) var(--ease-out-expo); }
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.slide.visible .reveal:nth-child(1) { transition-delay: 0.05s; }
+.slide.visible .reveal:nth-child(2) { transition-delay: 0.16s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: 0.27s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: 0.38s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: 0.49s; }
+
+/* Title slide special motion */
+.title-slide h1 .line { display: block; overflow: hidden; }
+.title-slide h1 .line > span { display: block; transform: translateY(110%); transition: transform 0.9s var(--ease-out-expo); }
+.title-slide.visible h1 .line:nth-child(1) > span { transform: translateY(0); transition-delay: 0.15s; }
+.title-slide.visible h1 .line:nth-child(2) > span { transform: translateY(0); transition-delay: 0.32s; }
+
+/* ============================================================
+   SHORT-HEIGHT BREAKPOINTS (mandatory)
+   ============================================================ */
+@media (max-height: 700px) {
+  :root { --slide-padding: clamp(0.8rem, 3vw, 2rem); --content-gap: clamp(0.5rem, 1.5vw, 1rem); --title-size: clamp(1.4rem, 5vw, 2.8rem); --h2-size: clamp(1.05rem, 3vw, 1.8rem); }
+}
+@media (max-height: 600px) {
+  :root { --slide-padding: clamp(0.6rem, 2.5vw, 1.5rem); --content-gap: clamp(0.4rem, 1vw, 0.8rem); --title-size: clamp(1.15rem, 4vw, 2rem); --body-size: clamp(0.72rem, 1.2vw, 0.95rem); }
+  .nav-dots { display: none; }
+}
+@media (max-height: 500px) {
+  :root { --slide-padding: clamp(0.5rem, 2vw, 1rem); --title-size: clamp(1rem, 3.5vw, 1.5rem); --h2-size: clamp(0.9rem, 2.5vw, 1.25rem); --body-size: clamp(0.66rem, 1vw, 0.85rem); }
+}
+@media (max-width: 600px) {
+  :root { --title-size: clamp(1.4rem, 8vw, 2.4rem); }
+  .grid { grid-template-columns: 1fr; }
+  .flow { flex-direction: column; }
+  .flow .arrow { transform: rotate(90deg); justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+  html { scroll-behavior: auto; }
+  .title-slide h1 .line > span { transform: translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress"></div>
+<nav class="nav-dots" id="navDots" aria-label="幻灯片导航"></nav>
+
+<!-- ════════ SLIDE 1 · TITLE ════════ -->
+<section class="slide title-slide" data-title="封面">
+  <div class="slide-content" style="align-items:flex-start;">
+    <div class="eyebrow reveal"><span class="dot">◆</span> HACKATHON PITCH · 2026</div>
+    <h1 style="margin-bottom:var(--content-gap);">
+      <span class="line"><span>Agents coordinate</span></span>
+      <span class="line"><span class="gradient-text">via a contract,</span></span>
+      <span class="line"><span>not chat messages.</span></span>
+    </h1>
+    <p class="reveal lead" style="font-size:var(--h3-size); max-width:42ch;">Crucible —— 契约驱动合成引擎</p>
+    <p class="reveal" style="margin-top:var(--element-gap); max-width:52ch;">让多智能体通过一份可执行的共享契约，自动发现缺陷、自动迭代，在模拟环境中跑出最佳结果，融合快慢思考。</p>
+    <div class="reveal" style="margin-top:var(--content-gap); display:flex; gap:0.6rem; flex-wrap:wrap;">
+      <span class="tag">LLM 多智能体</span>
+      <span class="tag m">可执行契约 DSL</span>
+      <span class="tag">自动抓缺陷</span>
+    </div>
+  </div>
+  <div class="chrome"><span>CRUCIBLE</span><span>01 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 2 · PROBLEM ════════ -->
+<section class="slide" data-title="问题">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> THE PROBLEM</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">多智能体系统,<span class="gradient-text">协调是个黑箱</span>。</h2>
+    <div class="split">
+      <ul class="bullet-list reveal">
+        <li><span><b>靠聊天消息协调</b> —— agent 之间自然语言传递,出错无法定位谁偏离了标准</span></li>
+        <li><span><b>"好"的标准锁死在代码里</b> —— 改一条评分规则要改代码、改测试、重新部署</span></li>
+        <li><span><b>每个团队重造轮子</b> —— 评分 + 迭代逻辑各自手写,不可复用、不可观测</span></li>
+        <li><span><b>demo 不可信</b> —— PPT 与 cherry-pick 截图,不是可运行的可执行契约</span></li>
+      </ul>
+      <div class="reveal card" style="border-color:rgba(255,62,165,0.35);">
+        <div class="num">PAIN · TODAY</div>
+        <h3 style="margin-top:0.4em;">"哪个 agent 判断错了?"</h3>
+        <p style="margin-top:0.5em;">在 prompt 黑箱里,这个问题<span style="color:var(--accent-magenta);">无法回答</span>。协调没有事实层,只有消息流。</p>
+      </div>
+    </div>
+  </div>
+  <div class="chrome"><span>PROBLEM</span><span>02 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 3 · INSIGHT ════════ -->
+<section class="slide" data-title="洞察">
+  <div class="slide-content" style="align-items:center; text-align:center;">
+    <div class="eyebrow reveal" style="text-align:center;"><span class="dot">◆</span> THE INSIGHT</div>
+    <h2 class="reveal" style="max-width:20ch; margin-bottom:var(--content-gap);">把"交付维度"<br><span class="gradient-text">写成一份可编译的契约。</span></h2>
+    <p class="reveal lead" style="max-width:60ch;">契约不是文档，是<b style="color:var(--accent-cyan);">可编辑评价系统</b>。改契约 = 改评价维度，结合场景极易轮换。所有 Agent 围绕这份共享 YAML 协调 —— 而不是互相注入 Prompt。</p>
+    <div class="reveal" style="margin-top:var(--content-gap); text-align:center;">
+      <span style="
+        display:inline-block;
+        font-family:var(--font-body);
+        font-size:clamp(1.05rem, 2vw, 1.45rem);
+        font-weight:700;
+        letter-spacing:0.01em;
+        padding:clamp(0.75rem, 1.4vw, 1.05rem) clamp(1.8rem, 3.4vw, 2.6rem);
+        border-radius:999px;
+        background:linear-gradient(120deg, var(--accent-cyan), var(--accent-magenta));
+        color:var(--bg-primary);
+        box-shadow:0 0 32px var(--accent-glow-c), 0 0 64px var(--accent-glow-m);
+      ">引擎通用，场景外置</span>
+    </div>
+  </div>
+  <div class="chrome"><span>INSIGHT</span><span>03 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 4 · HOW IT WORKS (3 pillars) ════════ -->
+<section class="slide" data-title="核心闭环">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> HOW IT WORKS · 一个契约,三件事</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">
+      契约不是文档,<span class="gradient-text">是 agents 共享的事实层。</span>
+    </h2>
+
+    <!-- 契约骨干横条:贯穿三个支柱 -->
+    <div class="reveal" style="text-align:center; margin-bottom:var(--element-gap);">
+      <span class="tag m" style="font-size:var(--mono-size);">
+        一份契约 ─── 字段 · 硬约束 · 评价维度 · 校准基线
+      </span>
+    </div>
+
+    <!-- 三支柱 -->
+    <div class="grid reveal" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));">
+
+      <!-- 支柱 1:闭环迭代 -->
+      <div class="card" style="border-color:rgba(34,227,255,0.35);">
+        <div class="num">① LOOP · 自动发现缺陷</div>
+        <h3>Scorer → Critic → Curator</h3>
+        <p style="margin-top:0.4em;">
+          确定性谓词读违规 → 生成 patch(零 LLM)→ Curator 验新颖度 → v2/v3。
+          <b style="color:var(--text-primary);">3 轮内分数单调上升</b>,提升 &lt; 0.01 即止。
+        </p>
+      </div>
+
+      <!-- 支柱 2:Live Env -->
+      <div class="card" style="border-color:rgba(255,62,165,0.35);">
+        <div class="num">② LIVE ENV · 动态世界</div>
+        <h3>边走边吐事件的模拟器</h3>
+        <p style="margin-top:0.4em;">
+          浏览器可观测环境一路推送 <code style="color:var(--accent-cyan);font-family:var(--font-mono);">disruption / info_drop / constraint_update</code>。
+          多智能体从<b style="color:var(--text-primary);">离线打分升级为对动态世界的连续决策</b>。
+          replay 路演 + record 录制双模,L1/L2/L3 安全网兜底。
+        </p>
+      </div>
+
+      <!-- 支柱 3:快慢分层 -->
+      <div class="card" style="border-color:rgba(34,227,255,0.35);">
+        <div class="num">③ FAST · SLOW · 快慢思考</div>
+        <h3>能算的算,该品的品</h3>
+        <p style="margin-top:0.4em;">
+          硬约束走<b style="color:var(--text-primary);">确定性代码</b>(快 / 零漂移 / 可解释);
+          评价维度<b style="color:var(--text-primary);">交给大模型</b>(慢 / 有品味 / 肯德尔秩系数校准)。
+          两层加权出最终分,省一半 LLM 调用。
+        </p>
+      </div>
+    </div>
+
+    <!-- 一句话总结 -->
+    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size); text-align:center;">
+      → 一份 YAML 同时承载这三件事:agents 不靠聊天,只读这份契约。
+    </p>
+  </div>
+  <div class="chrome"><span>HOW IT WORKS</span><span>04 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 5 · DEMO (code) ════════ -->
+<section class="slide" data-title="Demo">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> LIVE DEMO · 契约即代码</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">一份 YAML,<span class="gradient-text">定义"好计划"。</span></h2>
+    <div class="split">
+      <div class="code-win reveal">
+        <div class="bar"><i></i><i></i><i></i><span class="fn">travel-sequence-v1.yaml</span></div>
+<pre><span class="c"># 好计划的可执行定义</span>
+<span class="k">artifact_family</span>: <span class="s">sequence</span>
+<span class="k">fields</span>: [time_block, action, cost, source_trust]
+<span class="k">hard_constraints</span>:
+  - <span class="n">id</span>: <span class="s">time_budget</span>      <span class="c"># ≤ 960 min</span>
+  - <span class="n">id</span>: <span class="s">state_mutex</span>      <span class="c"># 互斥态</span>
+  - <span class="n">id</span>: <span class="s">continuity</span>       <span class="c"># 相邻 transit</span>
+<span class="k">rubric</span>: [cost_fit, source_trust, dining_fit]
+<span class="k">calibration</span>: { metric: <span class="s">kendall_tau</span> }</pre>
+      </div>
+      <div class="reveal">
+        <h3 style="margin-bottom:var(--element-gap);">真实 bug,被确定性抓出</h3>
+        <ul class="bullet-list">
+          <li><span><b>time_budget</b> —— 行程超 960 分钟</span></li>
+          <li><span><b>state_mutex</b> —— hiking 与 luggage_drop 冲突</span></li>
+          <li><span><b>continuity</b> —— 相邻节点无 transit</span></li>
+        </ul>
+        <p style="margin-top:var(--element-gap); color:var(--accent-cyan); font-family:var(--font-mono); font-size:var(--small-size);">→ 3 轮迭代后分数单调上升 ✓</p>
+      </div>
+    </div>
+  </div>
+  <div class="chrome"><span>DEMO</span><span>05 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 6 · TECH STACK ════════ -->
+<section class="slide" data-title="技术栈">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> TECH · 零新增依赖,纯 additive</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">工程过硬,<span class="gradient-text">不是 demo-ware。</span></h2>
+    <div class="grid reveal">
+      <div class="card"><div class="num">LANG</div><h3>TypeScript · ESM</h3><p>zod ^3.22 契约 schema + discriminatedUnion</p></div>
+      <div class="card"><div class="num">LLM</div><h3>Vercel AI SDK</h3><p>OpenAI 兼容 · DeepSeek/vLLM 均可 · 快慢分层</p></div>
+      <div class="card"><div class="num">STORE</div><h3>better-sqlite3</h3><p>5 表 + migration · :memory: 测试便利</p></div>
+      <div class="card"><div class="num">LIVE</div><h3>Live Env 双模</h3><p>replay 路演 + record 录制 · L1/L2/L3 安全网</p></div>
+      <div class="card"><div class="num">MCP</div><h3>JSON-RPC server</h3><p>契约作为工具暴露给外部 agent</p></div>
+      <div class="card"><div class="num">TEST</div><h3>vitest 602</h3><p>全绿 · typecheck clean · 零越界</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>TECH</span><span>06 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 7 · APPLICATIONS ════════ -->
+<section class="slide" data-title="应用场景">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> APPLICATIONS · 一套 DSL,跨五族</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">新增场景 = <span class="gradient-text">写一份契约</span>,不是写一个系统。</h2>
+    <div class="grid reveal" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));">
+      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>旅行行程</h3><p>sequence 族 · 3 bug 抓出</p></div>
+      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>竞品情报表</h3><p>table 族 · 跨族探针 GO</p></div>
+      <div class="card" style="border-color:rgba(34,227,255,0.4);"><div class="num">✓ LIVE</div><h3>财务尽调</h3><p>financial 族 · P4.3</p></div>
+      <div class="card"><div class="num">DSL</div><h3>brief / roster</h3><p>契约已支持,fixture 待补</p></div>
+    </div>
+    <p class="reveal" style="margin-top:var(--content-gap);">三条使用路径:<span class="tag" style="font-size:var(--small-size);">env:demo 路演</span> <span class="tag m" style="font-size:var(--small-size);">env:record 录制</span> <span class="tag" style="font-size:var(--small-size);">mcp:serve 集成</span></p>
+  </div>
+  <div class="chrome"><span>APPS</span><span>07 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 8 · MOAT ════════ -->
+<section class="slide" data-title="护城河">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> WHY US · 护城河</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">不做又一个 agent 框架,<span class="gradient-text">做协调的事实层。</span></h2>
+    <div class="split">
+      <ul class="bullet-list reveal">
+        <li><span><b>可执行契约作为协调事实层</b> —— 目前无直接竞品</span></li>
+        <li><span><b>组合难复制</b> —— DSL + Kendall τ 校准 + 契约自演化 + Live Env + 快慢分层</span></li>
+        <li><span><b>契约自演化闭环</b> —— novel state 自动提议约束 → A/B 验证 → promote</span></li>
+        <li><span><b>不绑框架</b> —— 永久 adapter,默认 SimpleAgent,Mastra 可选</span></li>
+      </ul>
+      <div class="reveal card" style="border-color:rgba(34,227,255,0.4); text-align:center;">
+        <div class="stat-row" style="justify-content:center;">
+          <div class="stat"><div class="v">8/10</div><div class="l">护城河</div></div>
+          <div class="stat"><div class="v">9/10</div><div class="l">叙事清晰</div></div>
+        </div>
+        <p style="margin-top:var(--element-gap); font-size:var(--small-size);">使用增长 2/10 —— 早期,核心 thesis 已自闭环验证</p>
+      </div>
+    </div>
+  </div>
+  <div class="chrome"><span>MOAT</span><span>08 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 9 · TRACTION / DATA ════════ -->
+<section class="slide" data-title="数据">
+  <div class="slide-content" style="align-items:center; text-align:center;">
+    <div class="eyebrow reveal" style="text-align:center;"><span class="dot">◆</span> TRACTION · 可验证,非感觉</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">不是 PPT,<span class="gradient-text">是可运行的工程。</span></h2>
+    <div class="stat-row reveal" style="justify-content:center; margin-bottom:var(--content-gap);">
+      <div class="stat"><div class="v">602</div><div class="l">测试全绿</div></div>
+      <div class="stat"><div class="v">5</div><div class="l">契约族</div></div>
+      <div class="stat"><div class="v">0.64</div><div class="l">judge Kendall τ</div></div>
+      <div class="stat"><div class="v">0</div><div class="l">新增依赖</div></div>
+    </div>
+    <p class="reveal" style="max-width:58ch;">bug 抓出率 travel/intel 各 3/3 · 路演 demo <span style="color:var(--accent-cyan); font-family:var(--font-mono);">npm run env:demo</span> 实测起服务 · 27 个 plan 提交全程 TDD</p>
+  </div>
+  <div class="chrome"><span>TRACTION</span><span>09 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 10 · ROADMAP ════════ -->
+<section class="slide" data-title="路线图">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> ROADMAP · 从项目到协议</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">下一步:<span class="gradient-text">冻结 v1.0,找 adopter。</span></h2>
+    <div class="grid reveal" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));">
+      <div class="card"><div class="num">NOW · ICE 10.0</div><h3>冻结 v1.0 契约标准</h3><p>Effort 低 / Confidence 高 —— 从项目变成协议</p></div>
+      <div class="card"><div class="num">NEXT · 北极星</div><h3>1 个外部 adopter</h3><p>让真实团队挂载契约跑他们的多 agent 任务</p></div>
+      <div class="card"><div class="num">THEN</div><h3>契约自演化去 Human Gate</h3><p>A/B 验证后自动 promote · OQ-TIER 升级</p></div>
+    </div>
+    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">→ 10x 不在加功能,在一个外部团队用契约跑通真实任务</p>
+  </div>
+  <div class="chrome"><span>ROADMAP</span><span>10 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 11 · ANTI-GOAL ════════ -->
+<section class="slide" data-title="反目标">
+  <div class="slide-content">
+    <div class="eyebrow reveal"><span class="dot">◆</span> ANTI-GOALS · 显式不建</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap);">克制,就是<span class="gradient-text">护城河的一部分。</span></h2>
+    <ul class="bullet-list reveal" style="max-width:62ch;">
+      <li><span><b>不靠聊天协调</b> —— 这是核心反目标,也是护城河</span></li>
+      <li><span><b>不做又一个 agent 框架</b> —— 不和 Mastra/LangGraph 竞争编排,做它们缺的事实层</span></li>
+      <li><span><b>不 fork / 不强绑</b> —— 永久 adapter,引擎可独立开源(AGPL 引擎 + 私有契约 ToB)</span></li>
+      <li><span><b>不做通用 LLM 应用</b> —— 聚焦"有可执行标准的合成类任务"</span></li>
+    </ul>
+  </div>
+  <div class="chrome"><span>ANTI-GOAL</span><span>11 / 12</span></div>
+</section>
+
+<!-- ════════ SLIDE 12 · CLOSING ════════ -->
+<section class="slide" data-title="结尾">
+  <div class="slide-content" style="align-items:center; text-align:center;">
+    <div class="eyebrow reveal" style="text-align:center;"><span class="dot">◆</span> CRUCIBLE</div>
+    <h2 class="reveal" style="margin-bottom:var(--content-gap); max-width:22ch;">Agents coordinate via an<br><span class="gradient-text">executable contract.</span></h2>
+    <p class="reveal lead" style="font-size:var(--h3-size); max-width:50ch;">Auto-discovering defects.<br>Auto-improving scores.</p>
+    <div class="reveal" style="margin-top:var(--content-gap); display:flex; gap:0.6rem; flex-wrap:wrap; justify-content:center;">
+      <span class="tag">npm run env:demo</span>
+      <span class="tag m">crucible-dev worktree</span>
+    </div>
+    <p class="reveal" style="margin-top:var(--content-gap); color:var(--text-dim); font-family:var(--font-mono); font-size:var(--small-size);">602 tests green · typecheck clean · zero new deps</p>
+  </div>
+  <div class="chrome"><span>THANK YOU</span><span>12 / 12</span></div>
+</section>
+
+<script>
+/* ============================================================
+   SLIDE PRESENTATION CONTROLLER
+   keyboard + wheel + touch navigation, progress, nav dots,
+   Intersection Observer reveal triggers
+   ============================================================ */
+class SlidePresentation {
+  constructor() {
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.currentIndex = 0;
+    this.isAnimating = false;
+    this.setupIntersectionObserver();
+    this.setupKeyboardNav();
+    this.setupWheelNav();
+    this.setupTouchNav();
+    this.setupNavDots();
+    this.setupProgressBar();
+    // Reveal the in-viewport slide IMMEDIATELY (synchronous, no rAF — rAF can be
+    // throttled in background/non-painting tabs and would leave the deck blank).
+    this.markVisibleInViewport();
+    // Belt-and-suspenders: some environments delay the IntersectionObserver
+    // callback; re-mark shortly after load in case layout wasn't ready.
+    setTimeout(() => this.markVisibleInViewport(), 120);
+  }
+
+  /** Add .visible to whichever slide's vertical center is in the viewport. */
+  markVisibleInViewport() {
+    const mid = window.scrollY + window.innerHeight / 2;
+    for (let i = 0; i < this.slides.length; i++) {
+      const top = this.slides[i].offsetTop;
+      const bottom = top + this.slides[i].offsetHeight;
+      if (mid >= top && mid < bottom) {
+        this.slides[i].classList.add('visible');
+        this.currentIndex = i;
+        this.updateNavDots();
+        this.updateProgress();
+        return;
+      }
+    }
+    // fallback: first slide
+    this.slides[0]?.classList.add('visible');
+  }
+
+  goTo(index) {
+    const i = Math.max(0, Math.min(this.slides.length - 1, index));
+    if (i === this.currentIndex || this.isAnimating) return;
+    this.isAnimating = true;
+    this.slides[i].scrollIntoView({ behavior: 'smooth' });
+    this.currentIndex = i;
+    this.updateNavDots();
+    this.updateProgress();
+    setTimeout(() => { this.isAnimating = false; }, 600);
+  }
+
+  setupIntersectionObserver() {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
+          entry.target.classList.add('visible');
+          const idx = this.slides.indexOf(entry.target);
+          if (idx !== -1) { this.currentIndex = idx; this.updateNavDots(); this.updateProgress(); }
+        }
+      });
+    }, { threshold: [0.55, 0.75] });
+    this.slides.forEach((s) => obs.observe(s));
+  }
+
+  setupKeyboardNav() {
+    document.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ':
+          e.preventDefault(); this.goTo(this.currentIndex + 1); break;
+        case 'ArrowLeft': case 'ArrowUp': case 'PageUp':
+          e.preventDefault(); this.goTo(this.currentIndex - 1); break;
+        case 'Home': e.preventDefault(); this.goTo(0); break;
+        case 'End': e.preventDefault(); this.goTo(this.slides.length - 1); break;
+      }
+    });
+  }
+
+  setupWheelNav() {
+    let wheelTimer = null;
+    document.addEventListener('wheel', (e) => {
+      if (this.isAnimating) return;
+      if (Math.abs(e.deltaY) < 25) return;
+      if (wheelTimer) return;
+      this.goTo(this.currentIndex + (e.deltaY > 0 ? 1 : -1));
+      wheelTimer = setTimeout(() => { wheelTimer = null; }, 700);
+    }, { passive: true });
+  }
+
+  setupTouchNav() {
+    let startY = 0;
+    document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      const dy = startY - e.changedTouches[0].clientY;
+      if (Math.abs(dy) > 50) this.goTo(this.currentIndex + (dy > 0 ? 1 : -1));
+    }, { passive: true });
+  }
+
+  setupNavDots() {
+    const nav = document.getElementById('navDots');
+    this.slides.forEach((_, i) => {
+      const btn = document.createElement('button');
+      btn.setAttribute('aria-label', `幻灯片 ${i + 1}`);
+      btn.addEventListener('click', () => this.goTo(i));
+      nav.appendChild(btn);
+    });
+    this.navDotEls = Array.from(nav.children);
+    this.updateNavDots();
+  }
+
+  updateNavDots() {
+    this.navDotEls?.forEach((d, i) => d.classList.toggle('active', i === this.currentIndex));
+  }
+
+  setupProgressBar() { this.progressEl = document.getElementById('progress'); this.updateProgress(); }
+  updateProgress() {
+    const pct = ((this.currentIndex + 1) / this.slides.length) * 100;
+    if (this.progressEl) this.progressEl.style.width = pct + '%';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => new SlidePresentation());
+</script>
+</body>
+</html>
