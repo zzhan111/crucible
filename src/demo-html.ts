@@ -157,6 +157,14 @@ async function main() {
   const intelGoldenReport = intelScorer.score(intelTableGolden);
   const crossFamilyGo = intelBuggyReport.deterministic.hard_violation_count === 3 && intelGoldenReport.deterministic.hard_violation_count === 0;
 
+  // §6 Live Env (replay from travel-drift.recorded.jsonl)
+  console.log('Section 6: Live Env replay');
+  let liveEnvEvents: import('./env/types.js').LiveEnvEvent[] = [];
+  try {
+    const envJsonl = readFileSync(join(__dirname, '..', 'src', 'env', 'scenarios', 'travel-drift.recorded.jsonl'), 'utf8');
+    liveEnvEvents = envJsonl.trim().split('\n').filter(l => l).map(l => JSON.parse(l));
+  } catch { /* fixture missing → skip §6 */ }
+
   // === 生成 HTML ===
   console.log('Rendering HTML...');
   const html = generateHtml({
@@ -165,6 +173,7 @@ async function main() {
     evolvedContract, version_bumped,
     abResult,
     intelBuggyReport, intelGoldenReport, crossFamilyGo,
+    liveEnvEvents,
   });
 
   const outPath = join(__dirname, '..', 'demo-report.html');
@@ -192,6 +201,7 @@ interface HtmlData {
   intelBuggyReport: ScoreReport;
   intelGoldenReport: ScoreReport;
   crossFamilyGo: boolean;
+  liveEnvEvents?: import('./env/types.js').LiveEnvEvent[];
 }
 
 export function generateHtml(d: HtmlData): string {
@@ -219,6 +229,11 @@ export function generateHtml(d: HtmlData): string {
   th{background:#f1f5f9}
   .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:bold}
   code{background:#f1f5f9;padding:2px 6px;border-radius:3px;font-size:13px}
+  .timeline{display:flex;flex-direction:column;gap:6px}
+  .event{padding:6px 10px;border-left:4px solid #6b7280;background:#f8fafc;border-radius:4px;font-size:13px}
+  .event.disruption{border-left-color:#ef4444}
+  .event.info_drop{border-left-color:#3b82f6}
+  .event.constraint_update{border-left-color:#f59e0b}
 </style>
 </head>
 <body>
@@ -288,6 +303,31 @@ export function generateHtml(d: HtmlData): string {
   </table>
   <p class="label">同一套 DSL(fields+constraints+rubric)跨族复用成功</p>
 </div>
+
+${d.liveEnvEvents && d.liveEnvEvents.length > 0 ? `
+<h2>6. Live Env(回放)</h2>
+<div class="card">
+  <div id="env-timeline" class="timeline"></div>
+</div>
+<script>
+(function(){
+  const events = ${JSON.stringify(d.liveEnvEvents)};
+  const tl = document.getElementById('env-timeline');
+  if (!tl) return;
+  let i = 0;
+  function playNext() {
+    if (i >= events.length) return;
+    const e = events[i++];
+    const div = document.createElement('div');
+    div.className = 'event ' + e.kind;
+    div.textContent = (e.t_offset_ms/1000).toFixed(1) + 's [' + e.kind + '] ' + (e.reason || e.constraint_id || e.subject || '');
+    tl.appendChild(div);
+    setTimeout(playNext, Math.max(100, (events[i]?.t_offset_ms || e.t_offset_ms) - e.t_offset_ms));
+  }
+  playNext();
+})();
+</script>
+` : ''}
 
 <hr>
 <p class="label" style="text-align:center">
