@@ -1,0 +1,34 @@
+artifact_family: sequence
+fields:
+  - {name: time_block,    type: string,   required: true}
+  - {name: action,        type: string,   required: true}
+  - {name: route,         type: string,   required: false}
+  - {name: duration_min,  type: integer,  required: true}
+  - {name: node_type,     type: enum,     required: true, values: [hard, transit, switch, core_experience, checkin, dining, buffer]}
+  - {name: elasticity,    type: enum,     required: true, values: [non_compressible, compressible, replaceable]}
+  - {name: cost,          type: number,   required: false}
+  - {name: source,        type: string,   required: false}
+  - {name: source_trust,  type: number,   required: false}
+  - {name: state,         type: 'string[]', required: false}
+hard_constraints:
+  - id: continuity
+    type: declarative
+    rule: "every adjacent pair of nodes must have a transit or switch between them"
+  - id: state_mutex
+    type: declarative
+    mutex: [luggage_drop, depart_from_hotel]
+  - id: time_budget
+    type: declarative
+    rule: "sum(duration_min) for each day ≤ daily_available_minutes (default 840)"
+  - id: no_duplicate_state
+    type: declarative
+    rule: "no state token appears in two consecutive nodes without a clearing transition"
+rubric:
+  - {dim: routing,        weight: 0.25, mode: proxy+judge}
+  - {dim: memorability,   weight: 0.20, mode: judge}
+  - {dim: dining_fit,     weight: 0.10, mode: judge}
+  - {dim: cost_fit,       weight: 0.15, mode: deterministic}
+  - {dim: source_trust,   weight: 0.30, mode: deterministic}
+calibration:
+  frozen_golden_set: golden/hk-3day-v1.jsonl
+  metric: kendall_tau
