@@ -1,0 +1,67 @@
+# ── Crucible 兼容核心（引擎读取）──
+metadata:
+  contract_id: "c_7f3a"            # 新增：契约身份（现缓存 key 只用 version，跨契约会撞）
+  version: 0.3
+  status: draft                    # draft | calibrating | published
+  scenario_id: "s_12"
+artifact_family: table
+blend: { deterministic: 0.6, judge: 0.4 }   # 新增，替代 augmented.ts 写死常量【依赖 P1】
+
+fields:                            # 现有结构 + 扩展属性
+  - name: order_qty
+    type: integer
+    required: true                 # 【依赖 P1】必须真校验
+    unit: "盒"                      # 新增
+    data_binding: "po_lines.qty"   # 新增：映射到用户数据列
+    quote_refs: [q_031]            # 新增：溯源
+
+hard_constraints:
+  - id: qty_vs_30d_sales           # 现有：id + type
+    type: declarative
+    rule: "单次采购量不超过近 30 天销量的 2 倍"   # 人类可读原句（保留）
+    primitive: ratio_threshold     # 新增：通用规则原语（见下）
+    params: { numerator: order_qty, denominator: sales_30d, op: "<=", value: 2.0 }
+    enforcement: gate              # 新增：gate=拒绝不打分 | penalty | lint【依赖 P1】
+    exceptions: ["新品首单", "促销备货"]
+    status: confirmed              # proposed | confirmed | disputed | retired
+    data_check: { pass_rate: null, checked_at: null }  # 在用户真实数据上的试跑结果
+    test_cases: { pass: [g_04], fail: [g_19] }
+    quote_refs: [q_031, q_044]
+
+evidence_requirements:             # 新增层②
+  - id: ev_price_source
+    applies_to: { field: unit_price }
+    min_tier: T2
+    max_age_days: 90
+    quote_refs: [q_052]
+source_tiers:                      # 新增：trust 由等级推导
+  - { tier: T1, name: "本地交易数据（POS/ERP）", trust: 1.0 }
+  - { tier: T2, name: "专家亲历 + 具体实例",      trust: 0.8 }
+  - { tier: T3, name: "公开文档/行业报告",        trust: 0.6 }
+  - { tier: T4, name: "LLM 常识（不可单独作证据）", trust: 0.0 }
+  # trust 数值为【假设】，由专家在 S3 确认
+
+rubric:                            # 现有 dim/weight/mode + 扩展
+  - dim: substitution_risk
+    weight: 0.30
+    weight_source: elicited        # elicited | fitted | default
+    mode: judge
+    definition: "缺货时顾客是否有可接受的替代品"
+    observables: ["同类目同功效 SKU 数", "替代品价差"]
+    anchors: { 1: "...", 3: "...", 5: "..." }
+    good_examples: [{ ref: g_02, why: "...", quote_refs: [q_060] }]
+    bad_examples:  [{ ref: g_11, why: "...", quote_refs: [q_061] }]
+    judge_spec:                    # 通用 judge【依赖 P2】
+      inputs: [sku_name, category, alternatives]   # 字段白名单，防止重复计分
+      output: { score: "1-5", rationale: str, evidence_quotes: "str[]" }
+      samples: 3                   # 取中位数
+
+calibration:                       # 现有 + 扩展
+  frozen_golden_set: "golden/c_7f3a/v0.3.jsonl"
+  metric: kendall_tau              # 需支持 τ-b（专家分档会产生并列）【依赖 P2】
+  holdout_ratio: 0.3               # 【假设】
+  outcome_signal: { metric: "sell_through_30d", available: false }
+
+# ── 溯源（单独 sidecar 文件 provenance.json，不进引擎）──
+# quotes:   { q_031: { session_id, turn_id, char_span, verbatim, ts, audio_ref? } }
+# conflicts:{ cf_07: { claim_ref, query, result, status, resolution_quote } }

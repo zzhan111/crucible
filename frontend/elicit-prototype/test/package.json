@@ -1,0 +1,1 @@
+{ "name": "elicit-proto-v02-test", "private": true, "dependencies": { "playwright-core": "*" } }

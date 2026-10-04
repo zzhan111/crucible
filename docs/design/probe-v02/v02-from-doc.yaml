@@ -1,0 +1,70 @@
+schema_version: 2
+metadata:
+  contract_id: "c_7f3a"
+  version: 3                        # 整数；身份 = (contract_id, version)
+  status: draft                     # draft | calibrating | published
+  scenario_id: "s_12"
+  spec_hash: "sha256:…"             # ContractSpec 规范化 hash（编译器写入）
+  compiler_version: "elicit-0.2.0"
+  provenance_hash: "sha256:…"       # sidecar provenance.json 的 hash
+  data_snapshot: { pos_sales_30d: "sha256:…" }
+artifact_family: table
+evaluation_unit: artifact           # v1 只允许 artifact（D12）
+
+context:                            # D11 评估上下文
+  as_of: required                   # 评分时必须传入，不再写死 REFERENCE_DATE
+  ref_tables:
+    - name: pos_sales_30d
+      key: sku_id
+      columns: { sales_30d: number, category: string }
+  bindings:                         # 评分前确定性 join，把参考列物化进 node
+    - { field: sales_30d, from: pos_sales_30d.sales_30d, on: sku_id, on_missing: error }
+
+fields:
+  - { name: sku_id,     type: string,  required: true }
+  - { name: order_qty,  type: integer, required: true, unit: "盒" }
+  - { name: is_new_sku, type: boolean, required: true }
+  - { name: sales_30d,  type: number,  required: true, origin: binding }
+
+hard_constraints:
+  - id: qty_vs_30d_sales
+    type: primitive                 # 第三个分支：旧引擎直接拒绝，而不是跳过
+    primitive: ratio_threshold
+    params: { numerator: order_qty, denominator: sales_30d, op: "<=", value: 2.0, on_zero_denominator: violate }
+    unless: [{ field: is_new_sku, op: "==", value: true }]   # 可执行的例外
+    scope: node
+    enforcement: penalty            # 默认 penalty；升 gate 见 §3.2
+    penalty: 0.15
+    rule_text: "单次采购量不超过近 30 天销量的 2 倍（新品首单除外）"
+    item_ref: "spec://c_7f3a/hr_01" # 溯源/状态/测试样本在 ContractSpec 里
+
+rubric:                             # 一组权重，确定性 + judge 合计 = 1；不再有 blend
+  - dim: stock_cover_fit
+    weight: 0.5
+    mode: deterministic
+    primitive: band
+    params:
+      metric: { ratio: [order_qty, sales_30d] }
+      bands: [{ max: 0.5, score: 0.4 }, { max: 1.5, score: 1.0 }, { max: 2.0, score: 0.6 }]
+      else_score: 0.0
+    aggregate: mean
+  - dim: category_balance
+    weight: 0.2
+    mode: deterministic
+    primitive: share_cap
+    params: { group_by: category, max_share: 0.4 }
+  - dim: substitution_risk
+    weight: 0.3
+    mode: judge
+    judge:
+      template: generic_v1          # D7 通用 judge
+      question: "缺货时顾客是否有可接受的替代品？"
+      inputs: [sku_id, category]    # 字段白名单
+      scale: { min: 1, max: 5 }     # 引擎负责归一化；不经过 parseJudgeScore
+      samples: 3
+      aggregate: median
+
+calibration:
+  golden_set_ref: "golden/c_7f3a/v3.jsonl"   # D14：校准真正读取这里
+  metric: kendall_tau_b
+  holdout: none                     # 标准档不强制 holdout（§3.6）

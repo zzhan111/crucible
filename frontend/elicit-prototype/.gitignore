@@ -1,0 +1,4 @@
+# 构建产物 / 测试输出（可重新生成）
+dist/
+test/node_modules/
+test/last-result.json
