@@ -8,6 +8,10 @@ function snapDiff(s, b, a) {
   return out;
 }
 function regMsg(reg) { return `重跑 ${reg.total} 个已标注案例：一致 ${reg.agreeBefore} → <b>${reg.agreeAfter}</b>${reg.fixed.length ? `，修好 ${reg.fixed.map(x => esc(x.it.name)).join('、')}` : ''}${reg.flipped.length ? `，翻转 ${reg.flipped.length} 个（已改标）` : ''}`; }
+/* 范围维度的父子约束（便利店：子类只能在已选品类之下） */
+function fixScopeChildren(sc, k, clearIfEmpty) {
+  SC().scope.filter(x => x.parent === k).forEach(ch => { if (!(sc[k] || []).length) { if (clearIfEmpty) sc[ch.k] = []; return; } const ok = ch.values(sc); sc[ch.k] = (sc[ch.k] || []).filter(x => ok.includes(x)); });
+}
 function closeModal() { ui.modal = null; ui.editor = null; renderModal(); }
 function gotoRule(id) {
   // v0.2：③ 是主从布局 → 选中该规则（列表行滚到可见 + 详情闪一下）；契约面板若开着保持打开
@@ -29,7 +33,7 @@ function applyRuleChange(s, newRule, text) {
 }
 
 const actions = {
-  'switch-session': d => { state.active = d.id; ui.matrixCell = null; ui.v2 = null; const pop = document.querySelector('details.sess-pop'); if (pop) pop.open = false; ui.triadMsg = null; ui.repairMsg = null; save(); render(); },
+  'switch-session': d => { state.active = d.id; ui.thr = null; ui.matrixCell = null; ui.v2 = null; const pop = document.querySelector('details.sess-pop'); if (pop) pop.open = false; ui.triadMsg = null; ui.repairMsg = null; save(); render(); },
   'new-session': () => { ui.modal = { type: 'new-session' }; renderModal(); },
   'create-session': () => { const name = ($('#new-sess-name').value || '').trim() || '未命名场景'; const id = 's' + Date.now(); state.sessions[id] = emptySession(id, name); state.order.push(id); state.active = id; closeModal(); save(); render(); toast(`已创建空场景「${esc(name)}」（占位）`); },
   'reset': () => openConfirm('重置演示数据？', '会清空本浏览器里的全部改动（规则、标注、维度、新场景），恢复到初始示例状态。', () => { state = freshState(); applyOverrides(); ui.matrixCell = null; ui.v2 = null; ui.triadMsg = null; ui.repairMsg = null; ui.rateExtra = {}; save(); render(); toast('已重置'); }, '重置', true),
@@ -65,16 +69,16 @@ const actions = {
     s.ratings[id] = {}; s.triad.current.forEach(c => s.ratings[id][c] = c === odd ? 5 : 1);
     s.triad.lastDim = id; s.triad.odd = null;
     bump(s, 'dim', `新增维度 ${id}：${like} ↔ ${diff}`);
-    ui.triadMsg = aiBubble([`你说那两个「${esc(like)}」。能再举一个最「${esc(like)}」的商品吗？`, `怎么一眼认出一个商品是「${esc(diff)}」——看包装、价格，还是别的？`, `「${esc(like)}」和「${esc(diff)}」跟“该不该留在货架上”有关系吗？`, `<div class="row gap"><input class="input grow" id="triad-followup" placeholder="回答会作为维度 ${id} 的补充原话保存（原型不做自动抽取）"><button class="btn small" data-act="triad-answer" data-dim="${id}">保存回答</button></div>`], '追问（laddering 通用探针）');
+    ui.triadMsg = aiBubble([...SC().text.triadProbe(like, diff), `<div class="row gap"><input class="input grow" id="triad-followup" placeholder="回答会作为维度 ${id} 的补充原话保存（原型不做自动抽取）"><button class="btn small" data-act="triad-answer" data-dim="${id}">保存回答</button></div>`], '追问（laddering 通用探针）');
     save(); render(); toast(`已存为维度 ${id}，并把这 3 个商品放在两端（可在下方改分）`);
   },
   'triad-answer': d => { const s = S(); const v = ($('#triad-followup').value || '').trim(); if (!v) return; const dim = s.dims.find(x => x.id === d.dim); if (dim) { (dim.notes = dim.notes || []).push({ text: v, ts: nowIso() }); s.log.unshift({ ts: nowIso(), kind: 'dim', text: `维度 ${dim.id} 补充原话：“${v}”` }); } ui.triadMsg = null; save(); render(); toast('已保存为补充原话'); },
   'rate': d => { const s = S(); const r = s.ratings[d.dim] = s.ratings[d.dim] || {}; const v = +d.v; if (r[d.code] === v) delete r[d.code]; else r[d.code] = v; save(); renderMain(); renderRight(); },
-  'rate-more': d => { const s = S(); const dim = s.dims.find(x => x.id === d.dim); const cats = [...new Set(dim.triad.map(c => ITEM[c].cat))]; ui.rateExtra = ui.rateExtra || {}; const have = new Set([...(ui.rateExtra[d.dim] || []), ...Object.keys(s.ratings[d.dim] || {}), ...dim.triad]); const pool = ITEMS.filter(i => !have.has(i.code) && (Math.random() < 0.5 ? cats.includes(i.cat) : true)); ui.rateExtra[d.dim] = [...(ui.rateExtra[d.dim] || []), ...distinctSku(pool, 5).map(i => i.code)]; renderMain(); },
+  'rate-more': d => { const s = S(); const dim = s.dims.find(x => x.id === d.dim); const cats = [...new Set(dim.triad.filter(c => ITEM[c]).map(c => SC().groupOf(ITEM[c])))]; ui.rateExtra = ui.rateExtra || {}; const have = new Set([...(ui.rateExtra[d.dim] || []), ...Object.keys(s.ratings[d.dim] || {}), ...dim.triad]); const pool = ITEMS.filter(i => !have.has(i.code) && (Math.random() < 0.5 ? cats.includes(SC().groupOf(i)) : true)); ui.rateExtra[d.dim] = [...(ui.rateExtra[d.dim] || []), ...distinctSku(pool, 5).map(i => i.code)]; renderMain(); },
   'dim-del': d => openConfirm('删除维度？', `删除 ${esc(d.id)} 及其打分。`, () => { const s = S(); s.dims = s.dims.filter(x => x.id !== d.id); delete s.ratings[d.id]; if (s.triad.lastDim === d.id) s.triad.lastDim = null; bump(s, 'dim', `删除维度 ${d.id}`); save(); render(); }, '删除', true),
   // ② 分堆
   'pile-set': d => { const s = S(); setLabel(s, d.code, d.v, 'pile'); save(); render(); },
-  'pile-new': () => { const s = S(); newPileBatch(s); save(); render(); toast('已换一批（9 个未标注商品，含同子类商品）'); },
+  'pile-new': () => { const s = S(); newPileBatch(s); save(); render(); toast(SC().text.pileNewToast); },
   'inc-note': d => { const s = S(); const el = document.getElementById('inc-' + d.key.replace(/\|/g, '_')); const v = (el && el.value || '').trim(); if (!v) { toast('写一句区别', 'err'); return; } s.pile.notes[d.key] = { text: v, ts: nowIso() }; const [a, b] = d.key.split('|'); s.log.unshift({ ts: nowIso(), kind: 'note', text: `区别（${ITEM[a].name} vs ${ITEM[b].name}）：“${v}”` }); save(); render(); },
   'inc-reopen': d => { delete S().pile.notes[d.key]; save(); render(); },
   'inc-same': d => { const s = S(); const p = pileInconsistencies(s).find(x => x.key === d.key); if (p) { setLabel(s, p.b.code, s.labels[p.a.code].v, 'pile'); } save(); render(); },
@@ -82,7 +86,7 @@ const actions = {
     const s = S(); const p = pileInconsistencies(s).find(x => x.key === d.key); const n = s.pile.notes[d.key]; if (!p) return;
     const cand = [p.b, p.a].find(it => evaluate(it, s.rules).verdict !== s.labels[it.code].v) || p.b;
     const e = evaluate(cand, s.rules);
-    openEditor({ draft: { scope: { sources: [...new Set([p.a.source, p.b.source])], cats: [p.a.cat], subs: [p.a.sub] }, conds: [], action: suggestAmount(e.score, s.labels[cand.code].v), quote: n ? n.text : '' }, target: cand.code, via: 'pile', title: `把“区别”变成规则（${p.a.sub}）` });
+    openEditor({ draft: { scope: SC().scopeOfPair(p.a, p.b), conds: [], action: suggestAmount(e.score, s.labels[cand.code].v), quote: n ? n.text : '' }, target: cand.code, via: 'pile', title: `把“区别”变成规则（${esc(SC().distKey(p.a))}）` });
   },
   // ③ 规则卡片
   'rule-filter': d => { ui.ruleFilter = d.f; renderMain(); },
@@ -92,21 +96,20 @@ const actions = {
   'rule-del': d => openConfirm('删除规则？', `删除 ${esc(d.id)}，然后重跑回归。`, () => { const s = S(); const after = s.rules.filter(r => r.id !== d.id); const reg = regression(s.rules, after); s.rules = after; bump(s, 'rule', `删除 ${d.id}`, reg); save(); render(); toast(regMsg(reg)); }, '删除', true),
   'rc-scope-del': d => {
     const s = S(); const r = clone(s.rules.find(x => x.id === d.id)); r.scope[d.k] = r.scope[d.k].filter(x => x !== d.v);
-    if (d.k === 'cats' && r.scope.cats.length) { const ok = r.scope.cats.flatMap(c => SUBS_BY_CAT[c]); r.scope.subs = r.scope.subs.filter(x => ok.includes(x)); }
-    if (d.k === 'cats' && !r.scope.cats.length) r.scope.subs = [];
+    fixScopeChildren(r.scope, d.k, true);
     applyRuleChange(s, r, `${r.id} 范围去掉「${d.v}」→ ${scopeText(r.scope)}`);
   },
   // ④ 纠错
   'repair-sel': d => { S().repair.selected = d.code; ui.repairMsg = null; save(); renderMain(); },
   'repair-newrule': d => {
     const s = S(), it = ITEM[d.code], e = evaluate(it, s.rules), L = s.labels[d.code].v;
-    openEditor({ draft: { scope: { sources: [it.source], cats: [it.cat], subs: [it.sub] }, conds: [], action: suggestAmount(e.score, L), quote: s.repair.drafts[d.code] || '' }, target: d.code, via: 'repair', title: `新建规则：区分「${it.name}」` });
+    openEditor({ draft: { scope: SC().scopeOf(it), conds: [], action: suggestAmount(e.score, L), quote: s.repair.drafts[d.code] || '' }, target: d.code, via: 'repair', title: `新建规则：区分「${it.name}」` });
   },
   'repair-exc': d => {
     const s = S(), it = ITEM[d.code];
     const others = caseStatus(s).filter(c => c.agree && c.code !== d.code && c.e.fired.some(r => r.id === d.id)).map(c => c.it);
     const sg = distinguish(it, others);
-    const ex = sg.find(g => g.field === 'spec' || g.field === 'sub') || sg[0] || (it.spec != null ? { field: 'spec', op: '≥', value: it.spec } : { field: 'sub', op: '=', value: it.sub });
+    const ex = sg.find(g => SC().excPrefer.includes(g.field)) || sg[0] || SC().excFallback(it);
     openEditor({ ruleId: d.id, target: d.code, focusExc: true, title: `给 ${d.id} 加例外（为「${it.name}」）` });
     ui.editor.draft.exceptions.push({ field: ex.field, op: ex.op, value: ex.value, quote: s.repair.drafts[d.code] || '' });
     renderModal();
@@ -117,10 +120,10 @@ const actions = {
   // ⑤ 矩阵
   'cell': d => { ui.matrixCell = { cat: d.cat, src: d.src }; renderMain(); },
   'cell-triad': d => { const s = S(); const c = d && d.cat ? { cat: d.cat, src: d.src } : ui.matrixCell; if (!c) return; ui.matrixCell = c; V().fill = { cat: c.cat, src: c.src }; newTriad(s, 'cell', c); state.tab = 'triad'; save(); render(); $('#main').scrollTop = 0; },
-  'cell-rule': () => { const c = ui.matrixCell; openEditor({ draft: { scope: { sources: [c.src], cats: [c.cat], subs: [] } }, via: 'matrix', title: `为 ${c.src} × ${c.cat} 新建规则` }); },
+  'cell-rule': () => { const c = ui.matrixCell; const sc = emptyScope(); sc[SC().matrix.col] = [c.src]; sc[SC().matrix.row] = [c.cat]; openEditor({ draft: { scope: sc }, via: 'matrix', title: `为 ${c.src} × ${c.cat} 新建规则` }); },
   // 编辑器
-  'ed-scope': d => { const sc = ui.editor.draft.scope; const a = sc[d.k]; const i = a.indexOf(d.v); if (i >= 0) a.splice(i, 1); else a.push(d.v); if (d.k === 'cats') { const ok = sc.cats.flatMap(c => SUBS_BY_CAT[c]); sc.subs = sc.subs.filter(x => ok.includes(x)); } renderModal(); },
-  'ed-add': d => { const t = ui.editor.target ? ITEM[ui.editor.target] : null; const c = { field: 'price', op: d.kind === 'exc' ? '≤' : '>', value: t && t.price != null ? t.price : '' }; if (d.kind === 'exc') { c.quote = ''; ui.editor.draft.exceptions.push(c); } else ui.editor.draft.conds.push(c); renderModal(); },
+  'ed-scope': d => { const sc = ui.editor.draft.scope; const a = sc[d.k]; const i = a.indexOf(d.v); if (i >= 0) a.splice(i, 1); else a.push(d.v); fixScopeChildren(sc, d.k, false); renderModal(); },
+  'ed-add': d => { const t = ui.editor.target ? ITEM[ui.editor.target] : null; const df = SC().defaultField, F = FIELDS[df]; const tv = t ? F.get(t) : null; const c = { field: df, op: d.kind === 'exc' ? '≤' : '>', value: tv != null ? tv : '' }; if (d.kind === 'exc') { c.quote = ''; ui.editor.draft.exceptions.push(c); } else ui.editor.draft.conds.push(c); renderModal(); },
   'ed-del': d => { const arr = d.kind === 'exc' ? ui.editor.draft.exceptions : ui.editor.draft.conds; arr.splice(+d.i, 1); renderModal(); },
   'ed-sugg': d => { const g = JSON.parse(d.g); const c = { field: g.field, op: g.op, value: g.value }; if (d.kind === 'exc') { c.quote = (S().repair.drafts[ui.editor.target] || ''); ui.editor.draft.exceptions.push(c); } else ui.editor.draft.conds.push(c); renderModal(); },
   'ed-toggle-active': () => { ui.editor.draft.active = !ui.editor.draft.active; renderEdDynamic(); },
@@ -158,8 +161,26 @@ document.addEventListener('change', e => {
   if (t.dataset.slot) { s.scenario[t.dataset.slot] = t.value; save(); return; }
   if (t.dataset.ed) edInput(t, true);
 });
+/* 行内阈值：草稿 = 规则副本 + 输入框里的新值 */
+function thrDraft(s, id) {
+  const r0 = s.rules.find(x => x.id === id); if (!r0) return null; const r = clone(r0);
+  document.querySelectorAll(`[data-thr="${id}"]`).forEach(inp => { const i = +inp.dataset.i; const v = inp.value.trim(); if (v !== '' && !isNaN(+v)) r.conds[i].value = +v; });
+  return r;
+}
+function thrPreview(id) {
+  const s = S(), r0 = s.rules.find(x => x.id === id), r = thrDraft(s, id); if (!r) return;
+  const changed = JSON.stringify(r.conds) !== JSON.stringify(r0.conds);
+  const n0 = hitSplit(r0).hit.length, sp = hitSplit(r), n1 = sp.hit.length;
+  const reg = regression(s.rules, s.rules.map(x => x.id === id ? r : x));
+  ui.thr = changed ? { id, conds: r.conds } : null;
+  const prev = $('#thr-prev'); if (prev) prev.innerHTML = changed ? `命中 ${n0} → <b class="thr-n">${n1}</b>（${n1 - n0 >= 0 ? '+' : ''}${n1 - n0}）${reg.flipped.length ? ` · <span class="bad-text">会翻转 ${reg.flipped.length} 个判对案例：${reg.flipped.map(x => esc(x.it.name)).join('、')}</span>` : ` · 回归 ${reg.total} 例无翻转${reg.fixed.length ? `，修好 ${reg.fixed.length}` : ''}`}` : '';
+  const hn = $('#rd-hitn'); if (hn) hn.textContent = `命中 ${n1}`;
+  const hl = $('#rd-hitlist'); if (hl) hl.innerHTML = sp.hit.slice(0, 8).map(miniItem).join('') + (sp.hit.length > 8 ? `<span class="muted small">…</span>` : '');
+  ['#thr-apply', '#thr-reset'].forEach(q => { const b = $(q); if (b) b.disabled = !changed; });
+}
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.dataset.thr) { thrPreview(t.dataset.thr); return; }
   if (t.dataset.repairDraft) { S().repair.drafts[t.dataset.repairDraft] = t.value; save(); return; }
   if (t.dataset.ed && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') && t.type !== 'radio' && t.type !== 'checkbox') edInput(t, false);
 });
@@ -167,13 +188,20 @@ function edInput(t, isChange) {
   const E = ui.editor; if (!E) return; const d = E.draft; const k = t.dataset.ed;
   if (k === 'quote') { d.quote = t.value; return; }
   if (k === 'force') { E.force = t.checked; renderEdDynamic(); return; }
-  if (k === 'action') { if (t.dataset.p === 'type') { d.action.type = t.value; renderModal(); } else { d.action.amount = +t.value; renderEdDynamic(); } return; }
+  if (k === 'action') {
+    const p = t.dataset.p;
+    if (p === 'type') { d.action.type = t.value; if (t.value === 'flag' && !d.action.label) d.action.label = '标记'; if (t.value === 'round' && !d.action.step) d.action.step = 5; if (t.value === 'penalty' && d.action.amount == null) d.action.amount = 0.3; renderModal(); }
+    else if (p === 'label') { d.action.label = t.value; renderEdDynamic(); }
+    else if (p === 'step') { d.action.step = +t.value || 5; renderEdDynamic(); }
+    else { d.action.amount = +t.value; renderEdDynamic(); }
+    return;
+  }
   if (k === 'cond' || k === 'exc') {
     const arr = k === 'exc' ? d.exceptions : d.conds; const c = arr[+t.dataset.i]; const p = t.dataset.p;
     if (p === 'field') {
       if (!isChange) return;
       c.field = t.value; const f = FIELDS[c.field]; const tg = E.target ? ITEM[E.target] : null;
-      c.op = OPS[f.type][0]; c.value = f.type === 'enum' ? (tg ? tg.sub : ITEMS[0].sub) : f.type === 'bool' ? '无' : f.type === 'num' ? (tg && f.get(tg) != null ? f.get(tg) : '') : '';
+      c.op = OPS[f.type][0]; c.value = f.type === 'enum' ? (f.values ? (tg && f.get(tg) != null ? f.get(tg) : f.values()[0]) : (tg ? tg.sub : ITEMS[0].sub)) : f.type === 'bool' ? (f.opts ? (tg ? f.get(tg) : f.opts[1]) : '无') : f.type === 'num' ? (tg && f.get(tg) != null ? f.get(tg) : '') : '';
       renderModal(); return;
     }
     if (p === 'quote') { c.quote = t.value; return; }
@@ -211,6 +239,9 @@ Object.assign(actions, {
   // 契约面板：条上的分区按钮 = 打开到该标签（再点一次收起）；面板内标签 = 切换
   'cp-tab': d => { const l = LY(); if (d.from === 'bar' && state.rightOpen && l.tab === d.k) state.rightOpen = false; else { l.tab = d.k; state.rightOpen = true; } saveLayout(); save(); renderContract(); },
   'cp-close': () => { state.rightOpen = false; save(); renderContract(); const b = $('.cb-title'); b && b.focus(); },
+  // ③ 行内改阈值（药点场景）：预览不落盘；应用 = 走 applyRuleChange（会翻转判对案例 → 转编辑器、保存被拦）
+  'thr-apply': d => { const s = S(); const r = thrDraft(s, d.id); if (!r) return; ui.thr = null; applyRuleChange(s, r, `${r.id} 改阈值：${ruleOneLine(r)}`); },
+  'thr-reset': () => { ui.thr = null; renderMain(); },
   'cp-dock': () => { const l = LY(); l.dock = l.dock === 'right' ? 'bottom' : 'right'; saveLayout(); renderContract(); },
 });
 

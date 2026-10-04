@@ -93,7 +93,7 @@ function parseSpec(text) {
   return Math.round(v * 10) / 10;
 }
 
-const ITEMS = window.__DATA__.map(r => {
+const STORE_ITEMS = window.__DATA__.map(r => {
   const [code, sku, name, pkgName, price, barcode, shelf, origin, note, front, side, back] = r;
   const display = name === pkgName ? name : code.startsWith('XM') ? (pkgName.startsWith(name.slice(0, 2)) ? pkgName : name + '（' + pkgName + '）') : (name + ' ' + pkgName);
   const c = classify(name + ' ' + pkgName);
@@ -105,17 +105,15 @@ const ITEMS = window.__DATA__.map(r => {
     spec, unitPrice: (spec && price != null && spec >= 1) ? Math.round(price / spec * 10000) / 100 : null,
   };
 });
-const ITEM = {};
-ITEMS.forEach(it => ITEM[it.code] = it);
 
-// 可用于条件 / 例外的字段
-const FIELDS = {
+// 可用于条件 / 例外的字段（便利店场景）
+const STORE_FIELDS = {
   price: { label: '单价', unit: '元', type: 'num', get: it => it.price },
   spec: { label: '规格', unit: 'g/ml', type: 'num', get: it => it.spec, hint: '从名称解析，可能不准' },
   unit: { label: '每100g/ml价', unit: '元', type: 'num', get: it => it.unitPrice },
   shelf: { label: '保质期', unit: '天', type: 'num', get: it => it.shelf },
   sub: { label: '子类', unit: '', type: 'enum', get: it => it.sub },
   name: { label: '名称', unit: '', type: 'text', get: it => it.name },
-  photo: { label: '正面照', unit: '', type: 'bool', get: it => it.photo ? '有' : '无' },
+  photo: { label: '正面照', unit: '', type: 'bool', get: it => it.photo ? '有' : '无', opts: ['有', '无'] },
 };
 const OPS = { num: ['>', '≥', '<', '≤', '='], enum: ['=', '≠'], text: ['包含', '不包含'], bool: ['='] };

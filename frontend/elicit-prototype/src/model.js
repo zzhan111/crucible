@@ -1,6 +1,5 @@
 /* ================= 模型层：状态、契约求值、回归、区分特征、导出 ================= */
 const STORE_KEY = 'elicit-proto-v1';
-const VERDICT = { good: '好', mid: '中', bad: '差' };
 const VERDICT_ORDER = { good: 0, mid: 1, bad: 2 };
 // 本地时区的 ISO 时间（带偏移，如 +08:00），避免导出里出现 UTC 的 Z 时间
 const nowIso = () => { const d = new Date(), o = -d.getTimezoneOffset(), p = n => String(Math.floor(Math.abs(n))).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${o >= 0 ? '+' : '-'}${p(o / 60)}:${p(o % 60)}`; };
@@ -45,7 +44,7 @@ function seedSession() {
   L('XM-0008-P01', 'good', '【示例】常备款');
   L('ZS-0010-P04', 'good', '【示例】这类东西在店里本来就卖得贵');
   return {
-    id: 'sparrow', name: '小小云雀选品', empty: false, version: 1,
+    id: 'sparrow', scen: 'sparrow', name: '小小云雀选品', empty: false, version: 1,
     scenario: { artifact: '单个包装 SKU（599 个包装 / 337 SKU）', purpose: '【示例】决定一个包装是否值得留在货架上', stakes: '【示例·待填】错杀好品 vs 放过差品，哪个代价大？' },
     catOverrides: {},
     rules,
@@ -60,29 +59,38 @@ function seedSession() {
   };
 }
 function emptySession(id, name) {
-  return { id, name, empty: true, version: 0, scenario: { artifact: '', purpose: '', stakes: '' }, catOverrides: {}, rules: [], dims: [], ratings: {}, triad: { current: [], mode: 'random', odd: null }, pile: { batch: [], showContract: true, notes: {} }, labels: {}, accepted: {}, repair: { selected: null, drafts: {} }, log: [] };
+  return { id, scen: null, name, empty: true, version: 0, scenario: { artifact: '', purpose: '', stakes: '' }, catOverrides: {}, rules: [], dims: [], ratings: {}, triad: { current: [], mode: 'random', odd: null }, pile: { batch: [], showContract: true, notes: {} }, labels: {}, accepted: {}, repair: { selected: null, drafts: {} }, log: [] };
 }
 function freshState() {
-  return { v: 1, active: 'sparrow', order: ['sparrow', 'yaodian'], tab: 'triad', rightOpen: false, sessions: { sparrow: seedSession(), yaodian: emptySession('yaodian', '药点ERP采购') } };
+  return { v: 1, active: 'sparrow', order: ['sparrow', 'yaodian'], tab: 'triad', rightOpen: false, sessions: { sparrow: seedSession(), yaodian: SCN.yaodian.seed() } };
 }
 let state;
 function loadState() {
-  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && s.v === 1 && s.sessions && s.sessions.sparrow) return s; } catch (e) { /* ignore */ }
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (s && s.v === 1 && s.sessions && s.sessions.sparrow) {
+      // v0.3 迁移：旧版里的「药点ERP采购」是空占位 → 换成接入真实数据的场景
+      const y = s.sessions.yaodian;
+      if (!y || (y.empty && !y.scen)) { s.sessions.yaodian = SCN.yaodian.seed(); if (!s.order.includes('yaodian')) s.order.splice(1, 0, 'yaodian'); }
+      s.sessions.sparrow.scen = 'sparrow';
+      return s;
+    }
+  } catch (e) { /* ignore */ }
   return freshState();
 }
 function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { console.warn('保存失败', e); } }
 const S = () => state.sessions[state.active];
+const scenOf = s => (s && s.scen) || 'sparrow';
+function syncScenario() { useScenario(scenOf(S())); }
 
 function applyOverrides() {
   const ov = state.sessions.sparrow.catOverrides || {};
-  ITEMS.forEach(it => { const o = ov[it.code]; it.cat = o ? o.cat : it.autoCat; it.sub = o ? o.sub : it.autoSub; });
+  STORE_ITEMS.forEach(it => { const o = ov[it.code]; it.cat = o ? o.cat : it.autoCat; it.sub = o ? o.sub : it.autoSub; });
 }
 
 /* ---------- 契约求值 ---------- */
 function inScope(it, sc) {
-  if (sc.sources.length && !sc.sources.includes(it.source)) return false;
-  if (sc.cats.length && !sc.cats.includes(it.cat)) return false;
-  if (sc.subs.length && !sc.subs.includes(it.sub)) return false;
+  for (const d of SC().scope) { const v = sc[d.k]; if (v && v.length && !v.includes(d.get(it))) return false; }
   return true;
 }
 function evalCond(it, c) {
@@ -99,20 +107,24 @@ function evalCond(it, c) {
   if (f.type === 'bool') return v === c.value;
   return false;
 }
+// 判定类型：penalty 扣分 / veto 否决 / confirm 列为“中间档”（药点：待确认）；flag 标记、round 数量凑整 不改判定（记在 marks）
+const isMark = r => r.action.type === 'flag' || r.action.type === 'round';
 function evaluate(it, rules) {
-  let score = 1, veto = false; const fired = [], excepted = [];
+  let score = 1, veto = false, confirm = false; const fired = [], excepted = [], marks = [];
   for (const r of rules) {
     if (!r.active || !inScope(it, r.scope)) continue;
     if (!r.conds.every(c => evalCond(it, c))) continue;
     const ex = r.exceptions.find(e => evalCond(it, e));
     if (ex) { excepted.push({ r, ex }); continue; }
+    if (isMark(r)) { marks.push(r); continue; }
     fired.push(r);
-    if (r.action.type === 'veto') veto = true; else score -= r.action.amount;
+    if (r.action.type === 'veto') veto = true; else if (r.action.type === 'confirm') confirm = true; else score -= r.action.amount;
   }
   score = Math.max(0, Math.round(score * 100) / 100);
   if (veto) score = 0;
-  const verdict = veto ? 'bad' : score >= 0.8 ? 'good' : score >= 0.55 ? 'mid' : 'bad';
-  return { score, verdict, fired, excepted, veto };
+  let verdict = veto ? 'bad' : score >= 0.8 ? 'good' : score >= 0.55 ? 'mid' : 'bad';
+  if (confirm && verdict === 'good') { verdict = 'mid'; score = Math.min(score, 0.7); }
+  return { score, verdict, fired, excepted, veto, marks };
 }
 function hits(rule) { return ITEMS.filter(it => rule.active !== false && inScope(it, rule.scope) && rule.conds.every(c => evalCond(it, c))); }
 function hitSplit(rule) {
@@ -144,34 +156,37 @@ function bump(s, kind, text, reg) { s.version++; s.log.unshift({ ts: nowIso(), k
 const niceNum = x => { if (x >= 100) return Math.round(x / 10) * 10; if (x >= 10) return Math.round(x); return Math.round(x * 2) / 2; };
 function distinguish(it, others) {
   const out = [];
-  for (const key of ['price', 'spec', 'unit', 'shelf']) {
+  const D = SC().dist;
+  for (const key of D.nums) {
     const f = FIELDS[key], v = f.get(it); if (v == null) continue;
     const vals = others.map(o => f.get(o)).filter(x => x != null); if (!vals.length) continue;
     const mx = Math.max(...vals), mn = Math.min(...vals);
     if (v > mx) { let t = niceNum((v + mx) / 2); if (!(t > mx && t <= v)) t = v; out.push({ field: key, op: t === v ? '≥' : '>', value: t, text: `${f.label} ${v}${f.unit}，高于其余（最高 ${mx}）` }); }
     else if (v < mn) { let t = niceNum((v + mn) / 2); if (!(t < mn && t >= v)) t = v; out.push({ field: key, op: t === v ? '≤' : '<', value: t, text: `${f.label} ${v}${f.unit}，低于其余（最低 ${mn}）` }); }
   }
-  if (others.length && others.every(o => o.sub !== it.sub)) out.push({ field: 'sub', op: '=', value: it.sub, text: `子类“${it.sub}”与其余都不同` });
-  if (others.length && others.every(o => o.photo !== it.photo)) out.push({ field: 'photo', op: '=', value: it.photo ? '有' : '无', text: `正面照：${it.photo ? '有' : '无'}，与其余不同` });
+  for (const g of D.enums) if (others.length && others.every(o => g.cmp(o) !== g.cmp(it))) out.push({ field: g.field, op: '=', value: g.val(it), text: g.text(it) });
   return out;
 }
 
 /* ---------- 文本化 ---------- */
 function condText(c) {
   const f = FIELDS[c.field]; if (!f) return '?';
-  if (f.type === 'text') return `名称${c.op}“${c.value || '…'}”`;
+  if (f.type === 'text') return `${f.label}${c.op}“${c.value || '…'}”`;
   if (f.type === 'enum') return `${f.label} ${c.op} ${c.value}`;
   if (f.type === 'bool') return `${f.label}：${c.value}`;
   return `${f.label} ${c.op} ${c.value === '' || c.value == null ? '…' : c.value}${f.unit}`;
 }
 function scopeText(sc) {
-  const p = [];
-  p.push(sc.sources.length ? sc.sources.join('/') : '全部来源');
-  p.push(sc.cats.length ? sc.cats.join('/') : '全部品类');
-  if (sc.subs.length) p.push(sc.subs.join('/'));
-  return p.join(' · ');
+  const p = SC().scope.filter(d => d.always || (sc[d.k] || []).length).map(d => (sc[d.k] || []).length ? (d.prefix ? d.label + ' ' : '') + sc[d.k].join('/') : d.all);
+  return p.join(' · ') || SC().scopeAll;
 }
-function actionText(a) { return a.type === 'veto' ? '否决（直接判差）' : `扣 ${a.amount} 分`; }
+function actionText(a) {
+  if (a.type === 'veto') return `否决（直接判${VERDICT.bad}）`;
+  if (a.type === 'confirm') return `列为「${VERDICT.mid}」`;
+  if (a.type === 'flag') return `标记「${a.label || '…'}」（不改判定）`;
+  if (a.type === 'round') return `数量凑整到 ${a.step || 5} 的倍数（不改判定）`;
+  return `扣 ${a.amount} 分`;
+}
 function ruleOneLine(r) { return `[${scopeText(r.scope)}] ${r.conds.length ? r.conds.map(condText).join(' 且 ') : '范围内全部'} → ${actionText(r.action)}${r.exceptions.length ? '；例外：' + r.exceptions.map(condText).join('、') : ''}`; }
 
 /* ---------- 导出 ---------- */
@@ -182,12 +197,13 @@ function contractSpec(s = S()) {
     schema: 'elicit-proto/contract-spec@0（原型导出，不是引擎可加载的 Crucible YAML）',
     exported_at: nowIso(), scenario_id: s.id, scenario_name: s.name, draft_version: s.version, expert_id: 'expert_1',
     scenario: s.scenario,
-    scoring: { base: 1.0, verdict_bands: { '好': '≥ 0.8', '中': '0.55–0.8', '差': '< 0.55 或被否决' } },
+    scoring: { base: 1.0, verdict_bands: { [VERDICT.good]: '≥ 0.8', [VERDICT.mid]: '0.55–0.8（或命中 confirm 规则）', [VERDICT.bad]: '< 0.55 或被否决' } },
     rules: s.rules.map(r => ({
-      id: r.id, origin: r.origin === 'default' ? 'common_sense_default（模拟 AI 新手）' : 'expert', example_seed: !!r.seed, active: r.active,
-      scope: { 来源: r.scope.sources, 品类: r.scope.cats, 子类: r.scope.subs },
+      id: r.id, origin: r.src && r.src.kind === 'code' ? 'coded_rule（' + srcRef(r) + '）' : r.origin === 'default' ? 'common_sense_default（模拟 AI 新手）' : r.src && r.src.kind === 'interview' ? 'owner_interview（' + srcRef(r) + '）' : 'expert', example_seed: !!r.seed, active: r.active,
+      scope: Object.fromEntries(SC().scope.map(d => [d.k, r.scope[d.k] || []])),
       when: r.conds.map(condText), conds: r.conds,
-      enforcement: r.action.type === 'veto' ? 'gate' : 'penalty', penalty: r.action.type === 'veto' ? null : r.action.amount,
+      enforcement: { veto: 'gate', confirm: 'confirm', flag: 'flag', round: 'qty_round' }[r.action.type] || 'penalty', penalty: r.action.type === 'penalty' ? r.action.amount : null,
+      pending_confirmation: r.pending || [],
       unless: r.exceptions.map(e => ({ cond: condText(e), raw: { field: e.field, op: e.op, value: e.value }, quote: e.quote || '' })),
       quote: r.quote || null, common_sense_reason: r.why || null, created_via: r.createdFrom.via, created_from_item: r.createdFrom.item || null,
       hit_count: hitSplit(r).hit.length,
@@ -214,10 +230,11 @@ function contractYaml(s = S()) {
     L.push(`  - id: ${r.id}`);
     L.push(`    origin: ${yamlStr(r.origin)}${r.example_seed ? '   # 示例' : ''}`);
     L.push(`    active: ${r.active}`);
-    L.push(`    scope: { 来源: [${r.scope.来源.join(', ')}], 品类: [${r.scope.品类.join(', ')}], 子类: [${r.scope.子类.join(', ')}] }`);
+    L.push(`    scope: { ${Object.entries(r.scope).map(([k, v]) => `${k}: [${v.join(', ')}]`).join(', ')} }`);
     L.push(`    when: [${r.when.map(yamlStr).join(', ')}]`);
     L.push(`    enforcement: ${r.enforcement}`);
     if (r.penalty != null) L.push(`    penalty: ${r.penalty}`);
+    if (r.pending_confirmation.length) L.push(`    pending_confirmation: [${r.pending_confirmation.map(yamlStr).join(', ')}]`);
     if (r.unless.length) { L.push('    unless:'); r.unless.forEach(u => { L.push(`      - cond: ${yamlStr(u.cond)}`); L.push(`        quote: ${yamlStr(u.quote)}`); }); }
     if (r.quote) L.push(`    quote: ${yamlStr(r.quote)}`);
     if (r.common_sense_reason) L.push(`    common_sense_reason: ${yamlStr(r.common_sense_reason)}`);

@@ -10,7 +10,8 @@ const SCREENS = [
   ['04-repair', p => p.click(tab('repair'))],
   ['05-matrix', p => p.click(tab('matrix'))],
   ['06-session-menu', async p => { await p.click('.sess-pop > summary'); }],
-  ['07-empty-session', async p => { await p.click('.sess-pop > summary'); await p.click('[data-act="switch-session"][data-id="yaodian"]'); }],
+  ['07-empty-session', async p => { await p.click('.sess-pop > summary'); await p.click('[data-act="new-session"]'); await p.fill('#new-sess-name', '新场景'); await p.click('[data-act="create-session"]'); }], // v0.3：药点已接入数据，空场景改为新建
+  ['08-yaodian-rules', async p => { await p.click('.sess-pop > summary'); await p.click('[data-act="switch-session"][data-id="yaodian"]'); await p.click('[data-act="tab"][data-tab="rules"]'); await p.click('#bm-I4'); }],
   ['10-contract-right-rules', async p => { await p.click(tab('rules')); await p.click('[data-act="toggle-right"]'); }],
   ['11-contract-right-dims', async p => { await p.click(tab('rules')); await p.click('#cbar [data-act="cp-tab"][data-k="dims"]'); }],
   ['12-contract-right-cases', async p => { await p.click(tab('repair')); await p.click('#cbar [data-act="cp-tab"][data-k="cases"]'); }],

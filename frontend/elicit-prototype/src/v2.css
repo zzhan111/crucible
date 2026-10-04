@@ -246,3 +246,22 @@ td.mc:hover .mc-jump, td.mc.sel .mc-jump { background: #fff; box-shadow: 0 0 0 1
 body.cp-open.dock-right .a-two { grid-template-columns: 1fr; }
 body.cp-open.dock-right .bm { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+
+/* ---------- v0.3：场景 2（药点ERP 采购规则）用到的少量样式 ---------- */
+.badge.b-code { background: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+.badge.b-pend { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.chip.c-mark { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+.chip.c-sug { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.code-src code, .why code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+.bm-src.code .bm-src-k { background: #e0f2fe; color: #075985; }
+.pend-box { margin-top: 6px; padding: 6px 8px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px; color: #78350f; }
+.pend-box b { display: block; margin-bottom: 2px; }
+.trace-marks { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.thr-cond { display: inline-flex; align-items: center; gap: 4px; }
+.thr-in { width: 72px; padding: 2px 6px; height: 26px; }
+.thr-bar { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; }
+.thr-prev { font-size: 13px; }
+.thr-prev .bad-text { color: #b91c1c; }
+.pend-card .pend-row { padding: 8px 0; border-top: 1px solid #f1f5f9; }
+.pend-card .pend-row:first-of-type { border-top: 0; }
+.yd-qty { margin: 4px 0; }

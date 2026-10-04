@@ -1,5 +1,6 @@
 // v0.2 测试：核心流程 + 新结构（步骤页签/状态、跳转链接、契约面板）+ 55 个 data-act 可达性
-// 用法：node run.js      （需要 /usr/bin/google-chrome；流程截图写到 ../shots/flow-*.png）
+// v0.3：「药点ERP 采购规则」已接入真实数据（不再是空占位）→ 会话步骤里的“空场景”检查改到新建场景之后；文件末尾追加药点场景检查（Y·…）
+// 用法：node run.js      （浏览器见 chrome.js / CHROME_PATH；药点隐私检查需 YSBANG_DATA 指向私有源数据；流程截图写到 ../shots/flow-*.png）
 const { chromium } = require('playwright-core');
 const path = require('path'), fs = require('fs');
 const URL = 'file://' + path.resolve(__dirname, '../index.html');
@@ -16,6 +17,7 @@ const CHANGE = ['im-cat', 'pile-show', 'rate-dim'];
   page.on('request', r => { const u = r.url(); if (!u.startsWith('file://') && !u.startsWith('blob:') && !u.startsWith('data:')) requests.push(u); });
   const seen = new Set();
   const collect = async () => { const acts = await page.evaluate(() => [...document.querySelectorAll('[data-act],[data-act-change]')].filter(e => { const b = e.getBoundingClientRect(); const cs = getComputedStyle(e); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && b.left < innerWidth && b.right > 0; }).map(e => e.dataset.act || ('change:' + e.dataset.actChange))); acts.forEach(a => seen.add(a)); };
+  const shotY = async name => { await page.waitForTimeout(150); await page.evaluate(() => { document.getElementById('toast-root').innerHTML = ''; }); await page.screenshot({ path: path.join(SHOTS, 'yaodian-' + name + '.png') }); };
   const shot = async name => { await page.waitForTimeout(150); await page.evaluate(() => { document.getElementById('toast-root').innerHTML = ''; }); await page.screenshot({ path: path.join(SHOTS, 'flow-' + name + '.png') }); };
   let cur = '';
   const check = (name, ok, detail = '') => { results.push({ step: cur, name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  [${cur}] ${name}${detail ? ' — ' + detail : ''}`); };
@@ -237,10 +239,10 @@ const CHANGE = ['im-cat', 'pile-show', 'rate-dim'];
     await page.click('.sess-pop > summary'); await collect();
     check('下拉列出 2 个场景 + 新场景 + 重置', await page.locator('.sess-pop .sess').count() === 2 && await page.locator('.sess-pop [data-act="new-session"]').count() === 1 && await page.locator('.sess-pop [data-act="reset"]').count() === 1);
     await page.keyboard.press('Escape'); check('Esc 关闭下拉', await page.locator('details.sess-pop[open]').count() === 0);
-    await page.click('.sess-pop > summary'); await page.click('[data-act="switch-session"][data-id="yaodian"]'); await page.waitForSelector('.empty-state');
-    check('空场景：步骤页签禁用', await page.locator('.steps-v2.disabled').count() === 1);
+    await page.click('.sess-pop > summary'); await page.click('[data-act="switch-session"][data-id="yaodian"]'); await page.waitForSelector('.steps-v2:not(.disabled)');
     await page.click('.sess-pop > summary'); await page.click('[data-act="new-session"]'); await page.fill('#new-sess-name', '测试场景'); await collect(); await page.click('[data-act="create-session"]');
     await page.waitForSelector('.empty-state'); check('新场景已创建', (await page.locator('.sess-pop h1').innerText()).includes('测试场景'));
+    check('空场景：步骤页签禁用', await page.locator('.steps-v2.disabled').count() === 1);
     await page.click('.sess-pop > summary'); check('下拉里有 3 个场景', await page.locator('.sess-pop .sess').count() === 3);
     await page.click('[data-act="switch-session"][data-id="sparrow"]'); check('切回小小云雀', await page.locator('.steps-v2:not(.disabled)').count() === 1);
   });
@@ -259,6 +261,131 @@ const CHANGE = ['im-cat', 'pile-show', 'rate-dim'];
   // 重新载入初始态，收集 dim-del / rc-scope-del 等只在有示例时出现的入口
   await step('补充可达性收集', async () => { await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForSelector('.steps-v2'); await tab('triad'); await collect(); await tab('rules'); await collect(); await tab('repair'); await collect(); await page.click('details[data-sec="queue"] > summary'); await collect();
     await page.click('#cbar [data-act="cp-tab"][data-k="conflicts"]'); await collect(); const g = page.locator('.cp-body [data-act="goto-tab"]'); check('初始态面板「待办」里有分堆不一致 → ② 链接', await g.count() >= 1); await g.first().click(); check('goto-tab → ②', (await status('pile')).on); await page.keyboard.press('Escape'); });
+
+  /* ================= v0.3：场景 2「药点ERP 采购规则」 ================= */
+  const Y = async (name, fn) => step('Y·' + name, fn);
+  const sw = async id => { await page.click('.sess-pop > summary'); await page.click(`[data-act="switch-session"][data-id="${id}"]`); await page.waitForTimeout(120); };
+  await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForSelector('.steps-v2');
+  await Y('切换场景', async () => {
+    await sw('yaodian');
+    check('顶栏显示药点场景', (await page.locator('.sess-pop h1').innerText()).includes('药点ERP 采购规则'));
+    check('步骤页签可用（不是空占位）', await page.locator('.steps-v2:not(.disabled) .st').count() === 5);
+    check('被评对象 = 1,272 SKU 的补货建议', (await page.locator('.scen-pop summary').innerText()).includes('1,272 SKU'));
+    check('药房名用「药点ERP 示例药房」', await page.evaluate(() => document.body.textContent.includes('药点ERP 示例药房')));
+    const n = await page.evaluate(() => ({ items: ITEMS.length, fields: Object.keys(FIELDS).length, sug: ITEMS.filter(i => i.sug === '补').length }));
+    check('数据：1272 SKU / 351 条补货建议', n.items === 1272 && n.sug === 351, JSON.stringify(n));
+  });
+  await Y('① 三元比较', async () => {
+    await tab('triad');
+    const names = await page.locator('.triad-card').allInnerTexts();
+    check('① 出 3 个真实 SKU（种子：三个感冒灵颗粒）', names.length === 3 && names.every(x => x.includes('感冒灵颗粒')), names.map(x => x.split('\n')[0]).join(' / '));
+    check('① 卡片带现有补货建议', names.every(x => /建议 (补\d|不补)/.test(x)));
+    await page.locator('.triad-card', { hasText: '华润三九' }).click(); await page.waitForTimeout(80);
+    await page.fill('#triad-like', '【测试】缺货、要补一点'); await page.fill('#triad-diff', '【测试】库存还够卖');
+    await shotY('01-triad'); await page.click('[data-act="triad-clear"]');
+    check('① 抽样模式按场景（同二级类·有补有不补）', await page.locator('[data-act="triad-mode"][data-mode="crosssrc"]', { hasText: '有补有不补' }).count() === 1);
+    await page.click('[data-act="triad-mode"][data-mode="crosssrc"]'); await page.waitForTimeout(80);
+    const sugs = await page.evaluate(() => S().triad.current.map(c => ITEM[c].sug));
+    check('① 有补有不补：同组里两种建议都有', new Set(sugs).size === 2, sugs.join(','));
+    await page.locator('.triad-card').first().click(); await page.fill('#triad-like', '【测试】都在卖'); await page.fill('#triad-diff', '【测试】这个没销量'); await page.click('[data-act="triad-save"]');
+    check('① 保存维度 → 追问用补货语境', (await page.locator('#main').innerText()).includes('这次该不该补'));
+  });
+  await Y('② 分堆排序', async () => {
+    await tab('pile');
+    const titles = await page.locator('.pile-col[data-pile] .pile-title').allInnerTexts();
+    check('② 三堆 = 该买 / 待确认 / 不该买', ['该买', '待确认', '不该买'].every(v => titles.some(x => x.startsWith(v + ' '))), titles.join('|'));
+    const before = await page.locator('[data-act="inc-same"]').count();
+    await page.click('[data-act="pile-set"][data-code="10209911"][data-v="good"]'); await page.waitForTimeout(80);
+    const inc = await page.locator('#main').innerText();
+    check('② 不一致检测：同二级类同分层、建议数量接近却进了不同堆', await page.locator('[data-act="inc-same"]').count() > before && inc.includes('同为 中成药·感冒用药'), String(before));
+    await shotY('02-pile');
+  });
+  await Y('③ 规则卡片', async () => {
+    const same = await page.evaluate(() => { const code = S().rules.filter(r => r.origin === 'default'); const bad = ITEMS.filter(it => evaluate(it, code).verdict !== (it.sug === '补' ? 'good' : 'bad')); return { n: ITEMS.length, bad: bad.length }; });
+    check('只用代码规则 = 现有补货建议（1272 个 SKU 全部一致）', same.bad === 0, JSON.stringify(same));
+    await tab('rules');
+    check('③ 规则列表 19 条（代码 14 + 访谈 5）', await page.locator('.bm-row').count() === 19);
+    await page.click('[data-act="rule-filter"][data-f="default"]'); check('筛选：代码规则 14', await page.locator('.bm-row').count() === 14);
+    check('代码规则每行显示 文件:行', await page.locator('.bm-row .bm-src.code').count() === 14);
+    await page.click('[data-act="rule-filter"][data-f="expert"]'); check('筛选：访谈规则 5（显示纪要行号）', await page.locator('.bm-row').count() === 5 && (await page.locator('.bm-row').first().innerText()).includes('访谈 L'));
+    await page.click('[data-act="rule-filter"][data-f="all"]');
+    check('待确认标记（30 元 / 1 年 / 5% 等）', await page.locator('.bm-row .b-pend').count() >= 4);
+    check('写不成规则的偏好面板（起购量 / 药中缘 / 权限）', await page.locator('details[data-sec="pending"]').count() === 1);
+    await page.click('#bm-I5'); const q = await page.locator('.rd-grid').first().innerText();
+    check('访谈规则显示纪要原文 + 出处行号', q.includes('普通商品偏好 5、10、15、20 等五的倍数') && q.includes('procurement-ai-owner-interview.md:L82'));
+    await page.click('#bm-C5');
+    check('代码规则显示 文件:行', (await page.locator('.code-src').first().innerText()).includes('purchase-strategy.json:5-10'));
+    const n0 = parseInt((await page.locator('#rd-hitn').innerText()).replace(/\D/g, ''), 10);
+    await page.fill('[data-thr="C5"][data-i="0"]', '10'); await page.waitForTimeout(120);
+    const n1 = parseInt((await page.locator('#rd-hitn').innerText()).replace(/\D/g, ''), 10);
+    const prev = await page.locator('#thr-prev').innerText();
+    check('改阈值 C5 30→10：命中数实时更新', n1 > n0 && prev.includes(`${n0} → ${n1}`), `${n0} → ${n1} · ${prev}`);
+    await collect(); await shotY('03-rules');
+    await page.click('[data-act="thr-reset"]'); check('还原阈值', parseInt((await page.locator('#rd-hitn').innerText()).replace(/\D/g, ''), 10) === n0);
+    const v0 = await page.evaluate(() => S().version);
+    await page.fill('[data-thr="C5"][data-i="0"]', '10'); await page.waitForTimeout(80); await collect(); await page.click('[data-act="thr-apply"]'); await page.waitForTimeout(120);
+    check('应用阈值 → 规则更新、版本 +1', await page.evaluate(v0 => S().rules.find(r => r.id === 'C5').conds[0].value === 10 && S().version === v0 + 1, v0) && (await page.locator('#rd-hitn').innerText()).includes(String(n1)));
+    await page.click('#bm-I4'); await page.fill('[data-thr="I4"][data-i="1"]', '1000'); await page.waitForTimeout(100);
+    check('阈值预览会提示翻转判对案例（I4 同通用名库存 >1000）', (await page.locator('#thr-prev').innerText()).includes('会翻转'));
+    await page.click('[data-act="thr-apply"]'); await page.waitForTimeout(150);
+    check('应用会翻转的阈值 → 转入编辑器、保存被拦', await page.locator('[data-act="ed-save"][disabled]').count() === 1);
+    await page.click('[data-act="close-modal"]');
+  });
+  await Y('④ 纠错循环', async () => {
+    await tab('repair');
+    const dis = await page.evaluate(() => disagreements(S()).map(c => c.code));
+    check('④ 种子分歧含 江中健胃消食片 / 苯磺酸氨氯地平（国药容生）', dis.includes('10000906') && dis.includes('10012877'), dis.join(','));
+    await page.click('[data-act="repair-sel"][data-code="10136595"]'); await page.waitForTimeout(80);
+    check('④ 判定附带数量（I5 凑整到 5）', (await page.locator('#main').innerText()).includes('凑整到 5 的倍数'));
+    await page.click('[data-act="repair-sel"][data-code="10000906"]'); await page.waitForTimeout(80);
+    check('④ 江中：契约判待确认（I4 + I2），你判该买', (await page.locator('.rv', { hasText: '契约的判断' }).first().innerText()).includes('待确认'));
+    await page.click('[data-act="repair-off"][data-id="I4"]'); await page.waitForSelector('#ed-foot');
+    check('④ 停用 I4 会翻转「感冒灵颗粒｜新峰」→ 保存被拦', await page.locator('[data-act="ed-save"][disabled]').count() === 1 && (await page.locator('.flip-box').innerText()).includes('感冒灵颗粒'));
+    await page.click('[data-act="close-modal"]');
+    await page.click('[data-act="repair-exc"][data-id="I4"]'); await page.waitForSelector('#ed-foot');
+    const exc = await page.evaluate(() => ui.editor.draft.exceptions.slice(-1)[0]);
+    check('④ 加例外：自动建议「必备流量品：是」', exc && exc.field === 'must' && exc.value === '是', JSON.stringify(exc));
+    await page.fill('[data-ed="exc"][data-p="quote"]', '必备流量品牌是例外：芬必得、999 感冒灵、江中健胃消食等，即使有同类品也需考虑保留，但数量不宜过多。');
+    check('④ 加例外不翻转 → 可保存', await page.locator('[data-act="ed-save"]:not([disabled])').count() === 1);
+    await page.click('[data-act="ed-save"]'); await page.waitForTimeout(150);
+    check('④ I4 已带例外，江中不再被 I4 命中', await page.evaluate(() => S().rules.find(r => r.id === 'I4').exceptions.length === 1 && !evaluate(ITEM['10000906'], S().rules).fired.some(r => r.id === 'I4')));
+    await page.click('[data-act="repair-sel"][data-code="10000906"]'); await page.waitForTimeout(80);
+    await shotY('04-repair');
+  });
+  await Y('⑤ 覆盖矩阵', async () => {
+    await tab('matrix');
+    const hd = await page.locator('.matrix thead th').allInnerTexts();
+    check('⑤ 矩阵 = ABC × 处方/OTC（4×3）', hd.length === 4 && hd[1].startsWith('处方药') && hd[2].startsWith('OTC') && await page.locator('.matrix tbody tr').count() === 4, hd.map(x => x.split('\n')[0]).join('|'));
+    const gaps = (await status('matrix')).n; check('⑤ 未聊到格子 > 0', gaps > 0, String(gaps));
+    check('⑤ 数据来源与抽样说明', (await page.locator('details[data-sec="map"] summary').innerText()).includes('数据来源与抽样'));
+    await shotY('05-matrix');
+    const j = page.locator('.mc-jump').first(); const cat = await j.getAttribute('data-cat'), src = await j.getAttribute('data-src');
+    await j.click(); await page.waitForTimeout(120);
+    const inCell = await page.evaluate(([c, s]) => S().triad.current.filter(x => ITEM[x].abc === c && ITEM[x].rx === s).length, [cat, src]);
+    check('⑤ → ① 去补样本：带着格子上下文', (await status('triad')).on && (await page.locator('#main').innerText()).includes('来自 ⑤') && inCell >= 1, `${cat}×${src} in=${inCell}`);
+    await page.click('#fill-ctx [data-act="go-back"]'); check('回到 ⑤', (await status('matrix')).on);
+  });
+  await Y('契约条 / 导出', async () => {
+    const bar = await page.locator('#cbar').innerText();
+    check('契约条：只用代码规则（无“模拟”标记）+ 访谈规则', bar.includes('只用代码规则') && bar.includes('访谈规则') && await page.locator('#cbar .cb-m .mock-tag').count() === 0);
+    const spec = await page.evaluate(() => contractSpec());
+    check('导出：代码规则带 文件:行、访谈规则带纪要行、待确认项', spec.rules.filter(r => r.origin.startsWith('coded_rule')).length === 14 && spec.rules.some(r => r.origin.includes('procurement-ai-owner-interview.md:L140')) && spec.rules.some(r => r.pending_confirmation.length), spec.rules.length + ' rules');
+    await page.click('[data-act="item"]', { timeout: 3000 }).catch(() => {});
+  });
+  await Y('切回便利店', async () => {
+    await page.keyboard.press('Escape'); await sw('sparrow');
+    check('切回小小云雀，数据与状态不受影响', (await page.locator('.sess-pop h1').innerText()).includes('小小云雀') && await page.evaluate(() => ITEMS.length === 599 && S().rules.length === 8) && (await status('matrix')).n === 17);
+    await sw('yaodian'); check('再切回药点，改动仍在（C5=10、I4 例外）', await page.evaluate(() => S().rules.find(r => r.id === 'C5').conds[0].value === 10 && S().rules.find(r => r.id === 'I4').exceptions.length === 1));
+  });
+  await Y('隐私扫描', async () => {
+    const { spawnSync } = require('child_process');
+    const r = spawnSync('python3', [path.resolve(__dirname, '../data/privacy_scan.py'), path.resolve(__dirname, '../index.html')], { encoding: 'utf8' });
+    check('构建产物无手机号 / 打码手机号 / 身份证号 / 邮箱 / 药房法定名称 / 源数据人员姓名', r.status === 0 && /RESULT: CLEAN/.test(r.stdout), (r.stdout || r.stderr).trim().split('\n').slice(-3).join(' | '));
+    const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+    check('不含个人字段名 / 原始单据字段', !/contact|saleMan|staffName|billCode|orgName/.test(html));
+    check('单文件 < 1.5 MB', Buffer.byteLength(html) < 1.5 * 1024 * 1024, Buffer.byteLength(html) + ' bytes');
+  });
+  cur = 'Y·可达性'; check('新增入口 thr-apply / thr-reset 可达', seen.has('thr-apply') && seen.has('thr-reset'));
 
   const missing = ALL.filter(a => !seen.has(a) && a !== 'overlay');
   const missingChange = CHANGE.filter(c => !seen.has('change:' + c));

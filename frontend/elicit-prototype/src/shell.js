@@ -16,7 +16,7 @@ function applyLayout() {
   b.classList.toggle('dock-right', l.dock === 'right'); b.classList.toggle('dock-bottom', l.dock === 'bottom');
   app.style.setProperty('--cpw', clampW(l.w) + 'px'); app.style.setProperty('--cph', clampH(l.h) + 'vh');
 }
-function render() { renderHead(); renderMain(); renderContract(); }
+function render() { syncScenario(); renderHead(); renderMain(); renderContract(); }
 function renderSidebar() { renderHead(); }           // 兼容旧调用：左栏已并入顶栏
 function renderRight() { renderContract(); renderSteps(); } // 兼容旧调用：契约变化时同步步骤状态
 
@@ -33,9 +33,10 @@ function stepStatus(s) {
   st.triad = s.dims.length ? { k: 'done', sub: `维度 ${s.dims.length}` } : s.triad.odd ? { k: 'prog', sub: '进行中' } : { k: 'todo', sub: '未开始' };
   const pend = un + incons;
   st.pile = !lab && !pend ? { k: 'todo', sub: '未开始' } : pend ? { k: 'prog', sub: '进行中', n: pend, tip: [un ? `待分 ${un}` : '', incons ? `不一致 ${incons}` : ''].filter(Boolean).join(' · ') } : { k: 'done', sub: `已标注 ${lab}` };
-  st.rules = !expert.length ? { k: 'todo', sub: '还没有专家规则' } : (zero + untraced) ? { k: 'prog', sub: `专家 ${expert.length}`, n: zero + untraced, tip: [zero ? `0 命中 ${zero}` : '', untraced ? `未溯源 ${untraced}` : ''].filter(Boolean).join(' · ') } : { k: 'done', sub: `专家规则 ${expert.length}` };
+  const EL = SC().labels.expert;
+  st.rules = !expert.length ? { k: 'todo', sub: '还没有' + EL } : (zero + untraced) ? { k: 'prog', sub: `${SC().labels.expertShort || '专家'} ${expert.length}`, n: zero + untraced, tip: [zero ? `0 命中 ${zero}` : '', untraced ? `未溯源 ${untraced}` : ''].filter(Boolean).join(' · ') } : { k: 'done', sub: `${EL} ${expert.length}` };
   st.repair = !lab ? { k: 'todo', sub: '还没有标注' } : dis ? { k: 'alert', sub: '分歧', n: dis, tip: `${dis} 个案例契约与你不一致` } : { k: 'done', sub: '全部一致' };
-  st.matrix = gaps ? { k: 'prog', sub: '未聊到', n: gaps, tip: `${gaps} 个有商品的格子还没有专属规则` } : { k: 'done', sub: '全部聊到' };
+  st.matrix = gaps ? { k: 'prog', sub: '未聊到', n: gaps, tip: `${gaps} 个有${SC().entity}的格子还没有专属规则` } : { k: 'done', sub: '全部聊到' };
   return st;
 }
 function stepsHtml(s) {
@@ -57,7 +58,7 @@ function renderHead() {
   const hasSeed = !s.empty && (s.rules.some(r => r.seed) || s.dims.some(d => d.seed) || Object.values(s.labels).some(l => l.seed));
   const sess = state.order.map(id => {
     const x = state.sessions[id];
-    const sub = x.empty ? '空 · 占位' : `规则 ${x.rules.filter(r => r.origin === 'expert').length} · 标注 ${labeledCodes(x).length} · 分歧 ${disagreements(x).length}`;
+    const sub = x.empty ? '空 · 占位' : withScenario(scenOf(x), () => `规则 ${x.rules.filter(r => r.origin === 'expert').length} · 标注 ${labeledCodes(x).length} · 分歧 ${disagreements(x).length}`);
     return `<button class="sess ${id === state.active ? 'active' : ''}" data-act="switch-session" data-id="${id}" role="menuitemradio" aria-checked="${id === state.active}"><span class="sess-icon">${esc(x.name.slice(0, 1))}</span><span><span class="sess-name">${esc(x.name)}</span><span class="sess-sub">${sub}</span></span>${id === state.active ? '<span class="sess-on">当前</span>' : ''}</button>`;
   }).join('');
   $('#head').innerHTML = `<div class="hd-row">
@@ -81,11 +82,11 @@ function contractParts(s) {
   const cs = caseStatus(s);
   const defaultOnly = s.rules.filter(r => r.origin === 'default').map(r => Object.assign({}, r, { exceptions: [], active: true }));
   const agreeDefault = cs.filter(c => evaluate(c.it, defaultOnly).verdict === c.label).length;
-  const expert = s.rules.filter(r => r.origin === 'expert'), def = s.rules.filter(r => r.origin === 'default');
+  const expert = s.rules.filter(r => r.origin === 'expert'), def = s.rules.filter(r => r.origin === 'default'), Lb = SC().labels;
   const ruleRow = r => `<div class="rp-rule ${r.active ? '' : 'off'} ${r.origin} ${state.tab === 'rules' && V().ruleSel === r.id ? 'on' : ''}" data-act="goto-rule" data-id="${r.id}" role="button" tabindex="0">
       <div class="rp-rule-top"><span class="rid">${r.id}</span>${originBadge(r)}${r.active ? '' : '<span class="badge b-off">已停用</span>'}<span class="hitc">命中 ${hitSplit(r).hit.length}</span></div>
       <div class="rp-rule-text">${esc(ruleOneLine(r))}</div>
-      ${r.origin === 'expert' ? (r.quote ? `<div class="quote">“${esc(r.quote)}”</div>` : '<div class="quote missing">（没有原话，无法溯源）</div>') : `<div class="why">常识理由${mockTag('模拟 AI')}：${esc(r.why)}</div>`}
+      ${r.src ? ruleWhyLine(r, true) : r.origin === 'expert' ? (r.quote ? `<div class="quote">“${esc(r.quote)}”</div>` : '<div class="quote missing">（没有原话，无法溯源）</div>') : `<div class="why">常识理由${mockTag('模拟 AI')}：${esc(r.why)}</div>`}
       ${r.exceptions.map(e => `<div class="quote small">例外「${esc(condText(e))}」${e.quote ? '：“' + esc(e.quote) + '”' : '<span class="missing">（无原话）</span>'}</div>`).join('')}
     </div>`;
   const dis = cs.filter(c => !c.agree && !c.accepted), acc = cs.filter(c => c.accepted);
@@ -95,7 +96,7 @@ function contractParts(s) {
   return {
     agree: cs.filter(c => c.agree).length, total: cs.length, agreeDefault, nExpert: expert.length, nConf,
     sec: {
-      rules: { title: '规则', count: s.rules.length, body: `<div class="sub-head">专家规则 ${expert.length}</div>` + (expert.length ? expert.map(ruleRow).join('') : '<div class="empty-note">还没有专家规则</div>') + `<div class="sub-head">常识契约 ${def.length} ${mockTag('模拟 AI 新手生成')}</div>` + def.map(ruleRow).join('') },
+      rules: { title: '规则', count: s.rules.length, body: `<div class="sub-head">${Lb.expert} ${expert.length}</div>` + (expert.length ? expert.map(ruleRow).join('') : `<div class="empty-note">还没有${Lb.expert}</div>`) + `<div class="sub-head">${Lb.def} ${def.length} ${Lb.defMock ? mockTag(Lb.defSub) : `<span class="muted tiny">${esc(Lb.defSub)}</span>`}</div>` + def.map(ruleRow).join('') },
       dims: { title: '维度（专家自己的词）', count: s.dims.length, body: s.dims.length ? s.dims.map(d => `<div class="rp-dim"><div><span class="rid">${d.id}</span> <b>${esc(d.left)}</b> ↔ <b>${esc(d.right)}</b> ${seedTag(d.seed)}<span class="hitc">已打分 ${Object.keys(s.ratings[d.id] || {}).length}</span></div><div class="quote small">像：“${esc(d.quoteL)}”</div><div class="quote small">不同：“${esc(d.quoteR)}”</div>${(d.notes || []).map(n => `<div class="quote small">补充：“${esc(n.text)}”</div>`).join('')}</div>`).join('') : '<div class="empty-note">去 <a class="link" data-act="goto-tab" data-tab="triad">① 三元比较</a> 生成维度</div>' },
       cases: { title: '已标注案例（回归集）', count: cs.length, body: cs.length ? cs.map(c => `<div class="rp-case ${c.agree ? 'ok' : c.accepted ? 'acc' : 'bad'}" data-act="goto-case" data-code="${c.code}" role="button" tabindex="0"><span class="case-name">${esc(c.it.name)}</span>${seedTag(c.L.seed)}<span class="case-v">你 ${vd(c.label)} 契约 ${vd(c.e.verdict)} ${c.agree ? '✓' : c.accepted ? '≈' : '✗'}</span></div>`).join('') : '<div class="empty-note">去 <a class="link" data-act="goto-tab" data-tab="pile">② 分堆排序</a> 标注</div>' },
       conflicts: { title: '冲突与待办', count: nConf, body: (dis.length ? `<div class="sub-head">契约 vs 你的标注</div>` + dis.map(c => `<div class="rp-conf" data-act="goto-case" data-code="${c.code}" role="button" tabindex="0">✗ ${esc(c.it.name)}：契约判 ${vd(c.e.verdict)}，你判 ${vd(c.label)}</div>`).join('') : '') +
@@ -114,11 +115,11 @@ function renderContract() {
     bar.innerHTML = `<button class="cb-title" data-act="toggle-right" aria-expanded="false" disabled><b>契约预览</b></button><span class="muted small">这个场景还没有任何内容。</span>`;
     panel.innerHTML = ''; return;
   }
-  const P = contractParts(s); const open = !!state.rightOpen; const rate = P.total ? P.agree / P.total : 1;
+  const P = contractParts(s), Lb = SC().labels; const open = !!state.rightOpen; const rate = P.total ? P.agree / P.total : 1;
   bar.innerHTML = `<button class="cb-title" data-act="toggle-right" aria-expanded="${open}" aria-controls="contract" title="${open ? '收起契约面板（Esc）' : '展开契约面板'}"><b>契约预览</b><span class="muted small">草稿 v${s.version} · 实时</span><span class="cb-caret" aria-hidden="true">${open ? (l.dock === 'right' ? '⟩' : '⌄') : (l.dock === 'right' ? '⟨' : '⌃')}</span></button>
     <span class="cb-m" title="当前契约与你的标注一致"><b class="${rate >= .9 ? 'ok' : 'warn'}">${P.agree}/${P.total}</b> 一致</span>
-    <span class="cb-m" title="只用常识契约（模拟）时一致"><b>${P.agreeDefault}/${P.total}</b> 只用常识${mockTag()}</span>
-    <span class="cb-m" title="专家独有规则"><b>${P.nExpert}</b> 专家规则</span>
+    <span class="cb-m" title="${esc(Lb.defOnlyTitle || '只用常识契约（模拟）时一致')}"><b>${P.agreeDefault}/${P.total}</b> ${esc(Lb.defOnly)}${Lb.defMock ? mockTag() : ''}</span>
+    <span class="cb-m" title="${esc(Lb.expertTitle || '专家独有规则')}"><b>${P.nExpert}</b> ${esc(Lb.expert)}</span>
     <span class="cb-sep"></span>
     ${CP_TABS.map(([k, t]) => `<button class="cb-sec ${open && l.tab === k ? 'on' : ''} ${k === 'conflicts' && P.nConf ? 'alert' : ''}" data-act="cp-tab" data-k="${k}" data-from="bar">${t} <b>${P.sec[k].count}</b></button>`).join('')}
     <span class="spacer"></span>
